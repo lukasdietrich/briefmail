@@ -21,10 +21,10 @@ import (
 )
 
 const (
-	s_start int = iota
-	s_cr
-	s_text
-	s_eof
+	sStart int = iota
+	sCr
+	sText
+	sEOF
 )
 
 type dotReader struct {
@@ -37,37 +37,37 @@ type dotReader struct {
 
 func (d *dotReader) readByte() (byte, error) {
 	switch d.state {
-	case s_start:
+	case sStart:
 		line, err := d.r.ReadLine()
 		if err != nil {
 			return 0, err
 		}
 
 		if len(line) == 1 && line[0] == '.' {
-			d.state = s_eof
+			d.state = sEOF
 			return 0, io.EOF
 		}
 
 		d.line = line
 		d.i = 0
-		d.state = s_text
+		d.state = sText
 
 		if len(line) > 1 && line[0] == '.' {
 			d.i++
 		}
 
 		fallthrough
-	case s_text:
+	case sText:
 		if d.i < len(d.line) {
 			r := d.line[d.i]
 			d.i++
 			return r, nil
 		}
 
-		d.state = s_cr
+		d.state = sCr
 		return '\r', nil
-	case s_cr:
-		d.state = s_start
+	case sCr:
+		d.state = sStart
 		return '\n', nil
 	}
 
@@ -109,25 +109,25 @@ func (d *dotWriter) Write(b []byte) (int, error) {
 		r := b[i]
 
 		switch d.state {
-		case s_start:
-			d.state = s_text
+		case sStart:
+			d.state = sText
 			if r == '.' {
 				w.WriteByte('.')
 			}
 
 			fallthrough
-		case s_text:
+		case sText:
 			switch r {
 			case '\r':
-				d.state = s_cr
+				d.state = sCr
 			case '\n':
 				w.WriteByte('\r')
-				d.state = s_start
+				d.state = sStart
 			}
-		case s_cr:
-			d.state = s_text
+		case sCr:
+			d.state = sText
 			if r == '\n' {
-				d.state = s_start
+				d.state = sStart
 			}
 		}
 
@@ -142,8 +142,8 @@ func (d *dotWriter) Write(b []byte) (int, error) {
 }
 
 func (d *dotWriter) Close() error {
-	if d.state != s_start {
-		if d.state == s_text {
+	if d.state != sStart {
+		if d.state == sText {
 			d.w.WriteByte('\r')
 		}
 		d.w.WriteByte('\n')
