@@ -22,13 +22,20 @@ import (
 	"time"
 )
 
+// Conn is a wrapper around a network connection to enable line based reading
+// and buffered writing.
 type Conn interface {
 	Reader
 	Writer
 
+	// SetReadTimeout sets the deadline for read calls to a time now + x
 	SetReadTimeout(time.Duration) error
+
+	// SetWriteTimeout sets the deadline for write calls to a time now + x
 	SetWriteTimeout(time.Duration) error
 
+	// UpgradeTLS replaces the underlying network connection with a tls
+	// connection. Nothing happens, when an error occured.
 	UpgradeTLS(*tls.Config) error
 }
 
