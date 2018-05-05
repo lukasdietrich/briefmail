@@ -17,6 +17,7 @@ package textproto
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -69,4 +70,40 @@ func TestDotReader(t *testing.T) {
 		assert.EqualValues(t, sequence[6], line)
 	}
 
+}
+
+func TestDotWriter(t *testing.T) {
+	buffer := bytes.NewBuffer(nil)
+	writer := newWriter(buffer)
+
+	assert.Nil(t, writer.WriteString("first line"))
+	assert.Nil(t, writer.Endline())
+
+	{
+		decoded := []string{
+			"normal line",
+			".with a dot",
+			".",
+			"",
+			"another",
+		}
+
+		encoder := writer.DotWriter()
+		io.Copy(encoder, bytes.NewBufferString(joinLines(decoded)))
+
+		assert.Nil(t, encoder.Close())
+		assert.Nil(t, writer.Flush())
+	}
+
+	expected := []string{
+		"first line",
+		"normal line",
+		"..with a dot",
+		"..",
+		"",
+		"another",
+		".",
+	}
+
+	assert.EqualValues(t, joinLines(expected), buffer.Bytes())
 }
