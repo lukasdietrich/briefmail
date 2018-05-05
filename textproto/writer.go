@@ -20,13 +20,21 @@ import (
 	"io"
 )
 
+// Writer is a buffered writer.
 type Writer interface {
 	io.Writer
 
+	// WriteString writes a string to the buffer.
 	WriteString(string) error
+
+	// Endline writes a <CR> <LF> sequence to the buffer.
 	Endline() error
+
+	// Flush writes the buffer to the underlying direct writer.
 	Flush() error
 
+	// DotWriter returns an io.WriteCloser, which encodes text into a
+	// dot-encoded sequence of lines. Upon closing a final dot line is written.
 	DotWriter() io.WriteCloser
 }
 
