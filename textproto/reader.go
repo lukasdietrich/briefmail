@@ -20,8 +20,13 @@ import (
 	"io"
 )
 
+// Reader is a buffer for line based reading.
 type Reader interface {
+	// ReadLine tries to read the next line, but may fail and return an error.
+	// If the line is non-nil, the error is nil and vice versa.
 	ReadLine() ([]byte, error)
+	// DotReader returns an io.Reader, which decodes a dot-encoded block of text
+	// up to, but discarding, the closing dot line.
 	DotReader() io.Reader
 }
 
