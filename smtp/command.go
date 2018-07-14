@@ -22,6 +22,10 @@ import (
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
+var (
+	errCommandSyntax = errors.New("command: invalid syntax")
+)
+
 // command represents a command-line of the form:
 //
 //     <head> <SP> <tail> <CR> <LF>
@@ -59,20 +63,24 @@ func (c *command) args(name string) (arg string, params [][]byte, err error) {
 
 	if name != "" {
 		if len(tail) < len(name)+3 { // len(FROM:<...>) < len(FROM) + len(:<>)
-			goto err
+			err = errCommandSyntax
+			return
 		}
 
 		if !bytes.HasPrefix(bytes.ToUpper(tail[:len(name)]), bytes.ToUpper([]byte(name))) {
-			goto err
+			err = errCommandSyntax
+			return
 		}
 
 		if !bytes.HasPrefix(tail[len(name):], []byte(":<")) {
-			goto err
+			err = errCommandSyntax
+			return
 		}
 
 		end := bytes.IndexRune(tail, '>')
 		if end < 0 {
-			goto err
+			err = errCommandSyntax
+			return
 		}
 
 		arg = string(tail[len(name)+2 : end])
@@ -87,9 +95,5 @@ func (c *command) args(name string) (arg string, params [][]byte, err error) {
 		params = bytes.Split(tail, []byte(" "))
 	}
 
-	return
-
-err:
-	err = errors.New("arg parse error")
 	return
 }

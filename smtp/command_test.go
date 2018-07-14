@@ -49,3 +49,23 @@ func TestArg(t *testing.T) {
 	assert.EqualValues(t, "foo@bar.com", arg)
 	assert.EqualValues(t, [][]byte{[]byte("a=b"), []byte("c=d")}, params)
 }
+
+func TestArgError(t *testing.T) {
+	var cmd command
+
+	cmd.parse([]byte("MAIL"))
+	_, _, err := cmd.args("FROM")
+	assert.Equal(t, errCommandSyntax, err)
+
+	cmd.parse([]byte("MAIL FROM:<foo@bar.com>"))
+	_, _, err = cmd.args("TO")
+	assert.Equal(t, errCommandSyntax, err)
+
+	cmd.parse([]byte("MAIL FROM:foo@bar.com"))
+	_, _, err = cmd.args("FROM")
+	assert.Equal(t, errCommandSyntax, err)
+
+	cmd.parse([]byte("MAIL FROM:<foo@bar.com"))
+	_, _, err = cmd.args("FROM")
+	assert.Equal(t, errCommandSyntax, err)
+}
