@@ -26,6 +26,7 @@ type reply struct {
 	text string
 }
 
+// nolint:errcheck
 func (r *reply) writeTo(w textproto.Writer) error {
 	w.WriteString(strconv.Itoa(r.code))
 	w.WriteString(" ")

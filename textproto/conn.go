@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -28,15 +29,18 @@ type Conn interface {
 	Reader
 	Writer
 
-	// SetReadTimeout sets the deadline for read calls to a time now + x
+	// SetReadTimeout sets the deadline for read calls to a time now + x.
 	SetReadTimeout(time.Duration) error
 
-	// SetWriteTimeout sets the deadline for write calls to a time now + x
+	// SetWriteTimeout sets the deadline for write calls to a time now + x.
 	SetWriteTimeout(time.Duration) error
 
 	// UpgradeTLS replaces the underlying network connection with a tls
 	// connection. Nothing happens, when an error occured.
 	UpgradeTLS(*tls.Config) error
+
+	// RemoteAddr returns the remote network address.
+	RemoteAddr() string
 }
 
 type variableNetConn struct {
@@ -85,4 +89,13 @@ func (c *conn) UpgradeTLS(config *tls.Config) error {
 	c.isTLS = true
 
 	return nil
+}
+
+func (c *conn) RemoteAddr() string {
+	var (
+		remote = c.raw.RemoteAddr().String()
+		i      = strings.Index(remote, ":")
+	)
+
+	return remote[:i]
 }
