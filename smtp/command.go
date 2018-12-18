@@ -92,7 +92,7 @@ func (c *command) args(name string) (arg string, params [][]byte, err error) {
 			tail = tail[1:]
 		}
 
-		params = bytes.Split(tail, []byte(" "))
+		params = bytes.Fields(tail)
 	}
 
 	return
