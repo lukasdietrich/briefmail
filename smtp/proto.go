@@ -21,17 +21,15 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
-// DeliverFunc is called to handle delivery of accepted mails.
-type DeliverFunc func(*model.Envelope, io.Reader) error
-
 // Config contains options for the SMTP protocol
 type Config struct {
 	Hostname string
-	Deliver  DeliverFunc
+	Mailman  *delivery.Mailman
 }
 
 type proto struct {
@@ -46,8 +44,8 @@ func New(config *Config) textproto.Protocol {
 			"EHLO": ehlo(config.Hostname),
 
 			"MAIL": mail(),
-			"RCPT": rcpt(),
-			"DATA": data(config.Deliver),
+			"RCPT": rcpt(config.Mailman),
+			"DATA": data(config.Mailman),
 
 			"NOOP": noop(),
 			"RSET": rset(),
@@ -61,8 +59,10 @@ var (
 	rReady          = reply{220, "ready"}
 	rBye            = reply{221, "closing transmission channel"}
 	rError          = reply{451, "action aborted: local error in processing"}
-	rNotimplemented = reply{502, "command not implemented"}
+	rPathTooLong    = reply{501, "path too long"}
+	rNotImplemented = reply{502, "command not implemented"}
 	rBadSequence    = reply{503, "bad sequence of commands"}
+	rInvalidAddress = reply{553, "invalid address format"}
 )
 
 func (p *proto) Handle(c textproto.Conn) {
@@ -98,14 +98,19 @@ func (p *proto) loop(s *session) error {
 		h, ok := p.handlerMap[string(bytes.ToUpper(cmd.head))]
 
 		if !ok {
-			s.send(&rNotimplemented)
+			s.send(&rNotImplemented)
 			continue
 		}
 
 		if err := h(s, &cmd); err != nil {
-			if err == errBadSequence {
+			switch err {
+			case errBadSequence:
 				s.send(&rBadSequence)
-			} else {
+			case model.ErrInvalidAddressFormat:
+				s.send(&rInvalidAddress)
+			case model.ErrPathTooLong:
+				s.send(&rPathTooLong)
+			default:
 				return err
 			}
 		}
