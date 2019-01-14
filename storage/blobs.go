@@ -60,6 +60,19 @@ func (b *Blobs) Delete(id uuid.UUID) error {
 	return b.fs.Remove(id.String())
 }
 
+func (b *Blobs) ReadOffset(id uuid.UUID, offset int64) (io.ReadCloser, error) {
+	f, err := b.fs.Open(id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	if offset > 0 {
+		_, err = f.Seek(offset, io.SeekStart)
+	}
+
+	return f, err
+}
+
 func (b *Blobs) Read(id uuid.UUID) (io.ReadCloser, error) {
-	return b.fs.Open(id.String())
+	return b.ReadOffset(id, 0)
 }
