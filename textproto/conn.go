@@ -23,6 +23,10 @@ import (
 	"time"
 )
 
+var (
+	ErrAlreadyTLS = errors.New("textproto: already secured by tls")
+)
+
 // Conn is a wrapper around a network connection to enable line based reading
 // and buffered writing.
 type Conn interface {
@@ -38,6 +42,9 @@ type Conn interface {
 	// UpgradeTLS replaces the underlying network connection with a tls
 	// connection. Nothing happens, when an error occured.
 	UpgradeTLS(*tls.Config) error
+
+	// IsTLS returns whether or not the connection is secured with tls.
+	IsTLS() bool
 
 	// RemoteAddr returns the remote network address.
 	RemoteAddr() string
@@ -75,8 +82,8 @@ func (c *conn) SetWriteTimeout(d time.Duration) error {
 }
 
 func (c *conn) UpgradeTLS(config *tls.Config) error {
-	if c.isTLS {
-		return errors.New("textproto: already tls")
+	if c.IsTLS() {
+		return ErrAlreadyTLS
 	}
 
 	tlsConn := tls.Server(c.raw.Conn, config)
@@ -89,6 +96,10 @@ func (c *conn) UpgradeTLS(config *tls.Config) error {
 	c.isTLS = true
 
 	return nil
+}
+
+func (c *conn) IsTLS() bool {
+	return c.isTLS
 }
 
 func (c *conn) RemoteAddr() string {
