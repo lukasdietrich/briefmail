@@ -48,7 +48,8 @@ func NewDB(fileName string) (*DB, error) {
 			"uuid"    char ( 36 )     primary key ,
 			"date"    integer         not null ,
 			"from"    varchar ( 256 ) not null ,
-			"size"    integer         not null
+			"size"    integer         not null ,
+			"offset"  integer         not null
 		) ;
 
 		create table if not exists "entries" (
@@ -134,14 +135,27 @@ func (d *DB) SetPassword(name, pass string) error {
 	}
 
 	return d.do(func(tx *sql.Tx) error {
-		_, err = tx.Exec(
+		result, err := tx.Exec(
 			`
 			update "mailboxes"
 			set "hash" = ?
 			where "name" = ? ;
 			`, hash, name)
 
-		return err
+		if err != nil {
+			return err
+		}
+
+		ar, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+
+		if ar < 1 {
+			return sql.ErrNoRows
+		}
+
+		return nil
 	})
 }
 
@@ -150,15 +164,44 @@ func hashPassword(pass string) (string, error) {
 	return string(hash), err
 }
 
-func (d *DB) AddMail(id uuid.UUID, size int64, envelope *model.Envelope) error {
+func (d *DB) Authenticate(name, pass string) (int64, bool, error) {
+	var (
+		id int64
+		ok bool
+	)
+
+	return id, ok, d.do(func(tx *sql.Tx) error {
+		var hash []byte
+
+		err := tx.QueryRow(
+			`
+			select "id", "hash"
+			from "mailboxes"
+			where "name" = ? ;
+			`, name).Scan(&id, &hash)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil
+			}
+
+			return err
+		}
+
+		ok = bcrypt.CompareHashAndPassword(hash, []byte(pass)) == nil
+		return nil
+	})
+}
+
+func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope *model.Envelope) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
 			insert into "mails"
-			( "uuid", "date", "from", "size" )
+			( "uuid", "date", "from", "size", "offset" )
 			values
-			( ?, ?, ?, ? ) ;
-			`, id, envelope.Date.Unix(), envelope.From.String(), size)
+			( ?, ?, ?, ?, ? ) ;
+			`, id, envelope.Date.Unix(), envelope.From.String(), size, offset)
 
 		return err
 	})
@@ -173,6 +216,50 @@ func (d *DB) DeleteMail(id uuid.UUID) error {
 			`, id)
 
 		return err
+	})
+}
+
+type Entry struct {
+	Mail uuid.UUID
+	Size int64
+}
+
+func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
+	var (
+		list  []Entry
+		total int64
+	)
+
+	return list, total, d.do(func(tx *sql.Tx) error {
+		rows, err := tx.Query(
+			`
+			select "m"."uuid", "m"."size"
+			from "mails" as "m"
+				inner join "entries" as "e"
+					on "m"."uuid" = "e"."mail"
+			where "e"."mailbox" = ?
+			order by "m"."date" desc
+			limit 1000 ;
+			`, mailbox)
+
+		if err != nil {
+			return err
+		}
+
+		defer rows.Close()
+
+		var entry Entry
+
+		for rows.Next() {
+			if err := rows.Scan(&entry.Mail, &entry.Size); err != nil {
+				return err
+			}
+
+			total += entry.Size
+			list = append(list, entry)
+		}
+
+		return nil
 	})
 }
 
@@ -202,14 +289,26 @@ func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
 	})
 }
 
-func (d *DB) DeleteEntry(mail uuid.UUID, mailbox int64) error {
+func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
 	return d.do(func(tx *sql.Tx) error {
-		_, err := tx.Exec(
+		stmt, err := tx.Prepare(
 			`
 			delete from "entries"
 			where "mailbox" = ?
 			  and "mail" = ? ;
-			`, mailbox, mail)
+			`)
+
+		if err != nil {
+			return err
+		}
+
+		defer stmt.Close()
+
+		for _, mail := range mails {
+			if _, err := stmt.Exec(mailbox, mail); err != nil {
+				return err
+			}
+		}
 
 		return err
 	})
