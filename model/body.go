@@ -24,7 +24,7 @@ type Body struct {
 	io.Reader
 }
 
-func (b *Body) Prepend(key, value string) {
+func (b *Body) Prepend(key, value string) int64 {
 	const (
 		// see RFC#2822 2.1.1
 		foldLength = 78
@@ -55,6 +55,8 @@ func (b *Body) Prepend(key, value string) {
 	}
 
 	b.Reader = io.MultiReader(&buffer, b.Reader)
+
+	return int64(buffer.Len())
 }
 
 func findFoldPoint(line string, length int) int {
