@@ -82,7 +82,7 @@ func (d *DB) do(fn func(*sql.Tx) error) error {
 	}
 
 	if err := fn(tx); err != nil {
-		tx.Rollback()
+		tx.Rollback() // nolint:errcheck
 		return err
 	}
 
@@ -246,7 +246,7 @@ func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
 			return err
 		}
 
-		defer rows.Close()
+		defer rows.Close() // nolint:errcheck
 
 		var entry Entry
 
@@ -277,7 +277,7 @@ func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
 			return err
 		}
 
-		defer stmt.Close()
+		defer stmt.Close() // nolint:errcheck
 
 		for _, mailbox := range mailboxes {
 			if _, err := stmt.Exec(mailbox, mail); err != nil {
@@ -302,7 +302,7 @@ func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
 			return err
 		}
 
-		defer stmt.Close()
+		defer stmt.Close() // nolint:errcheck
 
 		for _, mail := range mails {
 			if _, err := stmt.Exec(mailbox, mail); err != nil {
@@ -328,7 +328,7 @@ func (d *DB) AddToQueue(mail uuid.UUID, to []*model.Address) error {
 			return err
 		}
 
-		defer stmt.Close()
+		defer stmt.Close() // nolint:errcheck
 
 		for _, t := range to {
 			if _, err := stmt.Exec(mail, t.String()); err != nil {
