@@ -17,6 +17,7 @@ package smtp
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 
 	"github.com/sirupsen/logrus"
@@ -30,6 +31,7 @@ import (
 type Config struct {
 	Hostname string
 	Mailman  *delivery.Mailman
+	TLS      *tls.Config
 }
 
 type proto struct {
@@ -41,7 +43,8 @@ func New(config *Config) textproto.Protocol {
 	return &proto{
 		handlerMap: map[string]handler{
 			"HELO": helo(config.Hostname),
-			"EHLO": ehlo(config.Hostname),
+			"EHLO": ehlo(config.Hostname,
+				"STARTTLS"),
 
 			"MAIL": mail(),
 			"RCPT": rcpt(config.Mailman),
@@ -51,6 +54,8 @@ func New(config *Config) textproto.Protocol {
 			"RSET": rset(),
 			"VRFY": vrfy(),
 			"QUIT": quit(),
+
+			"STARTTLS": starttls(config.TLS),
 		},
 	}
 }
@@ -80,10 +85,10 @@ func (p *proto) Handle(c textproto.Conn) {
 
 	switch err := p.loop(s); err {
 	case io.EOF, errCloseSession, nil:
-		s.send(&rBye)
+		s.send(&rBye) // nolint:errcheck
 	default:
 		logrus.Warn(err)
-		s.send(&rError)
+		s.send(&rError) // nolint:errcheck
 	}
 }
 
@@ -98,18 +103,30 @@ func (p *proto) loop(s *session) error {
 		h, ok := p.handlerMap[string(bytes.ToUpper(cmd.head))]
 
 		if !ok {
-			s.send(&rNotImplemented)
+			if err := s.send(&rNotImplemented); err != nil {
+				return err
+			}
+
 			continue
 		}
 
 		if err := h(s, &cmd); err != nil {
 			switch err {
 			case errBadSequence:
-				s.send(&rBadSequence)
+				if err := s.send(&rBadSequence); err != nil {
+					return err
+				}
+
 			case model.ErrInvalidAddressFormat:
-				s.send(&rInvalidAddress)
+				if err := s.send(&rInvalidAddress); err != nil {
+					return err
+				}
+
 			case model.ErrPathTooLong:
-				s.send(&rPathTooLong)
+				if err := s.send(&rPathTooLong); err != nil {
+					return err
+				}
+
 			default:
 				return err
 			}

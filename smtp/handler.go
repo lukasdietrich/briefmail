@@ -16,6 +16,7 @@
 package smtp
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"time"
@@ -120,7 +121,7 @@ func vrfy() handler {
 //
 //     "QUIT" CRLF
 func quit() handler {
-	return func(s *session, _ *command) error {
+	return func(*session, *command) error {
 		return errCloseSession
 	}
 }
@@ -202,7 +203,7 @@ func data(mailman *delivery.Mailman) handler {
 		rOk   = reply{250, "confirmed transfer."}
 	)
 
-	return func(s *session, c *command) error {
+	return func(s *session, _ *command) error {
 		if !s.state.in(sRcpt) {
 			return errBadSequence
 		}
@@ -228,5 +229,32 @@ func data(mailman *delivery.Mailman) handler {
 
 		s.state = sHelo
 		return s.send(&rOk)
+	}
+}
+
+// `STARTTLS` command as specified in RFC#3207
+//
+//     "STARTTLS" CRLF
+func starttls(config *tls.Config) handler {
+	var (
+		rReady          = reply{220, "ready to go undercover."}
+		rTLSUnavailable = reply{454, "I am afraid, I lost my disguise!"}
+		rAlreadyTLS     = reply{454, "what are you afraid of?"}
+	)
+
+	return func(s *session, _ *command) error {
+		if config == nil {
+			return s.send(&rTLSUnavailable)
+		}
+
+		if s.IsTLS() {
+			return s.send(&rAlreadyTLS)
+		}
+
+		if err := s.send(&rReady); err != nil {
+			return err
+		}
+
+		return s.UpgradeTLS(config)
 	}
 }

@@ -17,7 +17,6 @@ package delivery
 
 import (
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/lukasdietrich/briefmail/addressbook"
@@ -58,13 +57,14 @@ func (m *Mailman) IsDeliverable(address *model.Address, local bool) bool {
 	return !local
 }
 
-func (m *Mailman) Deliver(envelope *model.Envelope, mail io.Reader) error {
+func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
+	offset := mail.Prepend("Return-Path", fmt.Sprintf("<%s>", envelope.From))
 	id, size, err := m.config.Blobs.Write(mail)
 	if err != nil {
 		return err
 	}
 
-	if err := m.config.DB.AddMail(id, size, envelope); err != nil {
+	if err := m.config.DB.AddMail(id, size, offset, envelope); err != nil {
 		m.config.Blobs.Delete(id)
 		return err
 	}
