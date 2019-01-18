@@ -24,6 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/lukasdietrich/briefmail/model"
 )
 
 func TestBlobs(t *testing.T) {
@@ -31,7 +33,7 @@ func TestBlobs(t *testing.T) {
 		blobs = Blobs{fs: afero.NewMemMapFs()}
 		data  = make([]byte, 2<<16)
 
-		id uuid.UUID
+		id model.ID
 		n  int64
 	)
 

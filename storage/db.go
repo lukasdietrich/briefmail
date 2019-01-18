@@ -18,7 +18,6 @@ package storage
 import (
 	"database/sql"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -193,7 +192,7 @@ func (d *DB) Authenticate(name, pass string) (int64, bool, error) {
 	})
 }
 
-func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope *model.Envelope) error {
+func (d *DB) AddMail(id model.ID, size, offset int64, envelope *model.Envelope) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
@@ -207,7 +206,7 @@ func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope *model.Envelope)
 	})
 }
 
-func (d *DB) DeleteMail(id uuid.UUID) error {
+func (d *DB) DeleteMail(id model.ID) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
@@ -220,7 +219,7 @@ func (d *DB) DeleteMail(id uuid.UUID) error {
 }
 
 type Entry struct {
-	Mail uuid.UUID
+	Mail model.ID
 	Size int64
 }
 
@@ -263,7 +262,7 @@ func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
 	})
 }
 
-func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
+func (d *DB) AddEntries(mail model.ID, mailboxes []int64) error {
 	return d.do(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(
 			`
@@ -289,7 +288,7 @@ func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
 	})
 }
 
-func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
+func (d *DB) DeleteEntries(mails []model.ID, mailbox int64) error {
 	return d.do(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(
 			`
@@ -314,7 +313,7 @@ func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
 	})
 }
 
-func (d *DB) AddToQueue(mail uuid.UUID, to []*model.Address) error {
+func (d *DB) AddToQueue(mail model.ID, to []*model.Address) error {
 	return d.do(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(
 			`
@@ -352,7 +351,7 @@ func (d *DB) DeleteFromQueue(id int64) error {
 	})
 }
 
-func (d *DB) IsOrphan(mail uuid.UUID) (bool, error) {
+func (d *DB) IsOrphan(mail model.ID) (bool, error) {
 	var isOrphan bool
 
 	return isOrphan, d.do(func(tx *sql.Tx) error {

@@ -21,6 +21,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
+
+	"github.com/lukasdietrich/briefmail/model"
 )
 
 type Blobs struct {
@@ -37,8 +39,8 @@ func NewBlobs(folderName string) (*Blobs, error) {
 	}, nil
 }
 
-func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
-	id := uuid.New()
+func (b *Blobs) Write(r io.Reader) (model.ID, int64, error) {
+	id := model.NewID()
 
 	f, err := b.fs.Create(id.String())
 	if err != nil {
@@ -56,11 +58,11 @@ func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
 	return id, size, f.Close()
 }
 
-func (b *Blobs) Delete(id uuid.UUID) error {
+func (b *Blobs) Delete(id model.ID) error {
 	return b.fs.Remove(id.String())
 }
 
-func (b *Blobs) ReadOffset(id uuid.UUID, offset int64) (io.ReadCloser, error) {
+func (b *Blobs) ReadOffset(id model.ID, offset int64) (io.ReadCloser, error) {
 	f, err := b.fs.Open(id.String())
 	if err != nil {
 		return nil, err
@@ -73,6 +75,6 @@ func (b *Blobs) ReadOffset(id uuid.UUID, offset int64) (io.ReadCloser, error) {
 	return f, err
 }
 
-func (b *Blobs) Read(id uuid.UUID) (io.ReadCloser, error) {
+func (b *Blobs) Read(id model.ID) (io.ReadCloser, error) {
 	return b.ReadOffset(id, 0)
 }
