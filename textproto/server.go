@@ -63,7 +63,7 @@ func (s *server) Listen(addr string) error {
 }
 
 func (s *server) handle(conn net.Conn) {
-	defer conn.Close()
+	defer conn.Close() // nolint:errcheck
 
 	s.proto.Handle(wrapConn(conn))
 }

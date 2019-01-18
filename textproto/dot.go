@@ -108,6 +108,7 @@ func (d *dotWriter) Write(b []byte) (int, error) {
 	for i < len(b) {
 		r := b[i]
 
+		// nolint:errcheck
 		switch d.state {
 		case sStart:
 			d.state = sText
@@ -142,6 +143,7 @@ func (d *dotWriter) Write(b []byte) (int, error) {
 }
 
 func (d *dotWriter) Close() error {
+	// nolint:errcheck
 	if d.state != sStart {
 		if d.state == sText {
 			d.w.WriteByte('\r')

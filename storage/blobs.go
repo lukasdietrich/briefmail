@@ -47,8 +47,8 @@ func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
 
 	size, err := io.Copy(f, r)
 	if err != nil {
-		f.Close()
-		b.Delete(id)
+		f.Close()    // nolint:errcheck
+		b.Delete(id) // nolint:errcheck
 
 		return uuid.Nil, -1, err
 	}
