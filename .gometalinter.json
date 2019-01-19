@@ -1,0 +1,8 @@
+{
+	"Enable": [
+		"golint",
+		"errcheck",
+		"deadcode",
+		"gofmt"
+	]
+}
