@@ -1,6 +1,6 @@
 # Briefmail
 
-Briefmail aims to be an easy to setup and selfcontained mail server for both
+Briefmail aims to be an easy to set up and self contained mail server for both
 sending and receiving emails.
 
 ## Motivation
