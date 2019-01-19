@@ -29,7 +29,6 @@ const (
 	sHelo
 	sMail
 	sRcpt
-	sData
 )
 
 func (s sessionState) String() string {
@@ -38,7 +37,6 @@ func (s sessionState) String() string {
 		"helo",
 		"mail",
 		"rcpt",
-		"data",
 	}[s]
 }
 
