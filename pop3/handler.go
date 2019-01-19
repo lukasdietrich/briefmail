@@ -1,6 +1,7 @@
 package pop3
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -275,5 +276,29 @@ func rset() handler {
 		}
 
 		return s.send(&rOk)
+	}
+}
+
+func stls(config *tls.Config) handler {
+	var (
+		rReady          = reply{true, "ready to go undercover."}
+		rTLSUnavailable = reply{false, "I am afraid, I lost my disguise!"}
+		rAlreadyTLS     = reply{false, "what are you afraid of?"}
+	)
+
+	return func(s *session, _ *command) error {
+		if config == nil {
+			return s.send(&rTLSUnavailable)
+		}
+
+		if s.IsTLS() {
+			return s.send(&rAlreadyTLS)
+		}
+
+		if err := s.send(&rReady); err != nil {
+			return err
+		}
+
+		return s.UpgradeTLS(config)
 	}
 }

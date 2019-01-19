@@ -2,6 +2,7 @@ package pop3
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"net"
 
@@ -15,6 +16,7 @@ type Config struct {
 	Hostname string
 	DB       *storage.DB
 	Blobs    *storage.Blobs
+	TLS      *tls.Config
 }
 
 type proto struct {
@@ -42,6 +44,8 @@ func New(config *Config) textproto.Protocol {
 			"NOOP": noop(),
 			"RSET": rset(),
 			"QUIT": quit(config.DB),
+
+			"STLS": stls(config.TLS),
 		},
 	}
 }
