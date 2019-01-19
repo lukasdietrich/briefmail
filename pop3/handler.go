@@ -34,6 +34,9 @@ var (
 
 type handler func(*session, *command) error
 
+// `USER` command as specified in RFC#1939
+//
+//     "USER" <mailbox> CRLF
 func user() handler {
 	rOk := reply{true, "now the secret"}
 
@@ -55,6 +58,9 @@ func user() handler {
 	}
 }
 
+// `PASS` command as specified in RFC#1939
+//
+//     "PASS" <password> CRLF
 func pass(l *locks, db *storage.DB) handler {
 	var (
 		rOk        = reply{true, "I knew it was you!"}
@@ -100,6 +106,9 @@ func pass(l *locks, db *storage.DB) handler {
 	}
 }
 
+// `QUIT` command as specified in RFC#1939
+//
+//     "QUIT" CRLF
 func quit(db *storage.DB) handler {
 	return func(s *session, _ *command) error {
 		if s.state.in(sTransaction) {
@@ -118,6 +127,9 @@ func quit(db *storage.DB) handler {
 	}
 }
 
+// `STAT` command as specified in RFC#1939
+//
+//     "STAT" CRLF
 func stat() handler {
 	return func(s *session, _ *command) error {
 		if !s.state.in(sTransaction) {
@@ -132,6 +144,9 @@ func stat() handler {
 	}
 }
 
+// `LIST` command as specified in RFC#1939
+//
+//     "LIST" [ id ] CRLF
 func list() handler {
 	rNoMessage := reply{false, "no such message"}
 
@@ -189,6 +204,9 @@ func list() handler {
 	}
 }
 
+// `RETR` command as specified in RFC#1939
+//
+//     "RETR" <id> CRLF
 func retr(blobs *storage.Blobs) handler {
 	var (
 		rOk        = reply{true, "message coming"}
@@ -236,6 +254,9 @@ func retr(blobs *storage.Blobs) handler {
 	}
 }
 
+// `DELE` command as specified in RFC#1939
+//
+//     "DELE" <id> CRLF
 func dele() handler {
 	var (
 		rOk        = reply{true, "woosh"}
@@ -269,6 +290,9 @@ func dele() handler {
 	}
 }
 
+// `NOOP` command as specified in RFC#1939
+//
+//     "NOOP" CRLF
 func noop() handler {
 	rOk := reply{true, "what did you expect?"}
 
@@ -277,6 +301,9 @@ func noop() handler {
 	}
 }
 
+// `RSET` command as specified in RFC#1939
+//
+//     "RSET" CRLF
 func rset() handler {
 	rOk := reply{true, "lost some intel during time travel"}
 
@@ -294,6 +321,9 @@ func rset() handler {
 	}
 }
 
+// `STLS` command as specified in RFC#2595
+//
+//     "STLS" CRLF
 func stls(config *tls.Config) handler {
 	var (
 		rReady          = reply{true, "ready to go undercover."}
