@@ -18,6 +18,7 @@ package smtp
 import (
 	"bytes"
 	"crypto/tls"
+	"fmt"
 	"io"
 
 	"github.com/sirupsen/logrus"
@@ -30,6 +31,7 @@ import (
 // Config contains options for the SMTP protocol
 type Config struct {
 	Hostname string
+	MaxSize  int64
 	Mailman  *delivery.Mailman
 	TLS      *tls.Config
 }
@@ -44,11 +46,13 @@ func New(config *Config) textproto.Protocol {
 		handlerMap: map[string]handler{
 			"HELO": helo(config.Hostname),
 			"EHLO": ehlo(config.Hostname,
-				"STARTTLS"),
+				fmt.Sprintf("SIZE %d", config.MaxSize),
+				fmt.Sprintf("STARTTLS"),
+			),
 
-			"MAIL": mail(),
+			"MAIL": mail(config.MaxSize),
 			"RCPT": rcpt(config.Mailman),
-			"DATA": data(config.Mailman),
+			"DATA": data(config.Mailman, config.MaxSize),
 
 			"NOOP": noop(),
 			"RSET": rset(),
@@ -65,6 +69,7 @@ var (
 	rBye            = reply{221, "closing transmission channel"}
 	rError          = reply{451, "action aborted: local error in processing"}
 	rPathTooLong    = reply{501, "path too long"}
+	rCommandSyntax  = reply{501, "syntax error in parameters or arguments"}
 	rNotImplemented = reply{502, "command not implemented"}
 	rBadSequence    = reply{503, "bad sequence of commands"}
 	rInvalidAddress = reply{553, "invalid address format"}
@@ -114,6 +119,11 @@ func (p *proto) loop(s *session) error {
 			switch err {
 			case errBadSequence:
 				if err := s.send(&rBadSequence); err != nil {
+					return err
+				}
+
+			case errCommandSyntax:
+				if err := s.send(&rCommandSyntax); err != nil {
 					return err
 				}
 

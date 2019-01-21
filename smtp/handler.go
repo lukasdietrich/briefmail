@@ -19,6 +19,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"strconv"
 	"time"
 
 	"github.com/lukasdietrich/briefmail/delivery"
@@ -129,15 +132,18 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail() handler {
-	rOk := reply{250, "noted."}
+func mail(maxSize int64) handler {
+	var (
+		rOk   = reply{250, "noted."}
+		rSize = reply{552, "bit too much"}
+	)
 
 	return func(s *session, c *command) error {
 		if !s.state.in(sHelo, sMail) {
 			return errBadSequence
 		}
 
-		arg, _, err := c.args("FROM")
+		arg, params, err := c.args("FROM")
 		if err != nil {
 			return err
 		}
@@ -145,6 +151,20 @@ func mail() handler {
 		from, err := model.ParseAddress(arg)
 		if err != nil {
 			return err
+		}
+
+		// see RFC#1870 "6. The extended MAIL command"
+		if maxSize > 0 {
+			if size, ok := params["SIZE"]; ok {
+				isize, err := strconv.ParseInt(size, 10, 64)
+				if err != nil {
+					return errCommandSyntax
+				}
+
+				if isize > maxSize {
+					return s.send(&rSize)
+				}
+			}
 		}
 
 		s.envelope.From = from
@@ -197,10 +217,11 @@ func rcpt(mailman *delivery.Mailman) handler {
 // `DATA` command as specified in RFC#5321 4.1.1.4
 //
 //     "DATA" CRLF
-func data(mailman *delivery.Mailman) handler {
+func data(mailman *delivery.Mailman, maxSize int64) handler {
 	var (
 		rData = reply{354, "go ahead. period."}
 		rOk   = reply{250, "confirmed transfer."}
+		rSize = reply{552, "I am already full, thanks"}
 	)
 
 	return func(s *session, _ *command) error {
@@ -218,12 +239,33 @@ func data(mailman *delivery.Mailman) handler {
 
 		s.envelope.Date = time.Now()
 
-		body := model.Body{Reader: s.DotReader()}
+		var (
+			r  = s.DotReader()
+			lr = r
+		)
+
+		if maxSize > 0 {
+			// limit reader to the allowed size plus a little extra
+			lr = &limitedReader{r, maxSize + 1024}
+		}
+
+		body := model.Body{Reader: lr}
 		body.Prepend("Received", fmt.Sprintf("from %s by (briefmail); %s",
 			s.envelope.From,
-			time.Now().Format(time.RFC1123Z)))
+			s.envelope.Date.Format(time.RFC1123Z)))
 
 		if err := mailman.Deliver(&s.envelope, body); err != nil {
+			if err == errReaderLimitReached {
+				// discard remaining bytes (but not forever) to flush
+				// the input stream
+				_, err := io.Copy(ioutil.Discard, &limitedReader{r, maxSize})
+				if err != nil {
+					return err
+				}
+
+				return s.send(&rSize)
+			}
+
 			return err
 		}
 
