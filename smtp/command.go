@@ -58,7 +58,11 @@ func (c *command) parse(line []byte) {
 	}
 }
 
-func (c *command) args(name string) (arg string, params [][]byte, err error) {
+func (c *command) args(name string) (
+	arg string,
+	params map[string]string,
+	err error,
+) {
 	tail := c.tail
 
 	if name != "" {
@@ -92,7 +96,15 @@ func (c *command) args(name string) (arg string, params [][]byte, err error) {
 			tail = tail[1:]
 		}
 
-		params = bytes.Fields(tail)
+		params = make(map[string]string)
+
+		for _, param := range bytes.Fields(tail) {
+			if i := bytes.IndexRune(param, '='); i < 0 {
+				params[string(bytes.ToUpper(param))] = ""
+			} else {
+				params[string(bytes.ToUpper(param[:i]))] = string(param[i+1:])
+			}
+		}
 	}
 
 	return

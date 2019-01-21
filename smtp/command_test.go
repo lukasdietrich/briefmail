@@ -38,16 +38,23 @@ func TestParse(t *testing.T) {
 func TestArg(t *testing.T) {
 	var cmd command
 
-	cmd.parse([]byte("MAIL FROM:<foo@bar.com> a=b c=d"))
+	cmd.parse([]byte("MAIL FROM:<foo@bar.com> a=b c=d e"))
 
 	assert.EqualValues(t, "MAIL", cmd.head)
-	assert.EqualValues(t, "FROM:<foo@bar.com> a=b c=d", cmd.tail)
+	assert.EqualValues(t, "FROM:<foo@bar.com> a=b c=d e", cmd.tail)
 
 	arg, params, err := cmd.args("FROM")
 
 	assert.Nil(t, err)
 	assert.EqualValues(t, "foo@bar.com", arg)
-	assert.EqualValues(t, [][]byte{[]byte("a=b"), []byte("c=d")}, params)
+
+	assert.EqualValues(t, 3, len(params))
+	assert.EqualValues(t, "b", params["A"])
+	assert.EqualValues(t, "d", params["C"])
+
+	v, ok := params["E"]
+	assert.EqualValues(t, "", v)
+	assert.True(t, ok)
 }
 
 func TestArgError(t *testing.T) {
