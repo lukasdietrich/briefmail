@@ -15,7 +15,10 @@
 
 package textproto
 
-import "net"
+import (
+	"crypto/tls"
+	"net"
+)
 
 // Server is a general purpose tcp server for text based protocols like SMTP
 // or POP3.
@@ -35,14 +38,18 @@ type Protocol interface {
 }
 
 type server struct {
-	proto Protocol
+	proto     Protocol
+	tlsConfig *tls.Config
 }
 
 // NewServer returns a Server using a specified protocol implementation.
+// If the provided *tls.Config is non-nil, the Server will accept only
+// connections over tls.
 // The Server has to be started explitly afterwards.
-func NewServer(proto Protocol) Server {
+func NewServer(proto Protocol, tlsConfig *tls.Config) Server {
 	return &server{
-		proto: proto,
+		proto:     proto,
+		tlsConfig: tlsConfig,
 	}
 }
 
@@ -65,5 +72,11 @@ func (s *server) Listen(addr string) error {
 func (s *server) handle(conn net.Conn) {
 	defer conn.Close() // nolint:errcheck
 
-	s.proto.Handle(wrapConn(conn))
+	wrapped := wrapConn(conn)
+
+	if s.tlsConfig != nil && wrapped.UpgradeTLS(s.tlsConfig) != nil {
+		return
+	}
+
+	s.proto.Handle(wrapped)
 }
