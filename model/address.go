@@ -23,6 +23,12 @@ import (
 var (
 	ErrInvalidAddressFormat = errors.New("address: invalid format")
 	ErrPathTooLong          = errors.New("address: path too long")
+
+	NilAddress = &Address{
+		raw:    "",
+		User:   "",
+		Domain: "",
+	}
 )
 
 type Address struct {
@@ -32,6 +38,10 @@ type Address struct {
 }
 
 func ParseAddress(raw string) (*Address, error) {
+	if len(raw) == 0 {
+		return NilAddress, nil
+	}
+
 	if i := strings.LastIndex(raw, "@"); i > -1 {
 		addr := Address{
 			raw:    raw,
