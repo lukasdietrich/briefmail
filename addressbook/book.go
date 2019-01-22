@@ -15,7 +15,11 @@
 
 package addressbook
 
-import "github.com/lukasdietrich/briefmail/model"
+import (
+	"fmt"
+
+	"github.com/lukasdietrich/briefmail/model"
+)
 
 type EntryKind int
 
@@ -30,16 +34,41 @@ type Entry struct {
 	Forward *model.Address
 }
 
+func (e *Entry) String() string {
+	switch e.Kind {
+	case Local:
+		return fmt.Sprintf("local(mailbox=%d)", *e.Mailbox)
+	case Forward:
+		return fmt.Sprintf("forward(to=%s)", e.Forward)
+	}
+
+	return ""
+}
+
 type Book struct {
 	entries map[string]map[string]*Entry
 }
 
 func (b *Book) Lookup(addr *model.Address) (*Entry, bool) {
-	domain, ok := b.entries[addr.Domain]
-	if !ok {
+	entry, ok := lookupInDomain(b.entries[addr.Domain], addr)
+	if ok {
+		return entry, true
+	}
+
+	entry, ok = lookupInDomain(b.entries["*"], addr)
+	return entry, ok
+}
+
+func lookupInDomain(domain map[string]*Entry, addr *model.Address) (*Entry, bool) {
+	if domain == nil {
 		return nil, false
 	}
 
 	entry, ok := domain[addr.User]
+	if ok {
+		return entry, true
+	}
+
+	entry, ok = domain["*"]
 	return entry, ok
 }

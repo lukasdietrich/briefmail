@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/BurntSushi/toml"
+	"github.com/sirupsen/logrus"
 
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/storage"
@@ -63,6 +64,15 @@ func Parse(fileName string, db *storage.DB) (*Book, error) {
 				Kind:    Local,
 				Mailbox: &mailbox,
 			}
+		}
+	}
+
+	logrus.Debug("addressbook:")
+	for domain, entries := range book.entries {
+		logrus.Debugf("- domain: \"%s\"", domain)
+
+		for user, entry := range entries {
+			logrus.Debugf("  - user: \"%s\" => %s", user, entry)
 		}
 	}
 
