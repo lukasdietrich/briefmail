@@ -136,7 +136,7 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(maxSize int64, hooks ...hook.FromHook) handler {
+func mail(maxSize int64, hooks []hook.FromHook) handler {
 	var (
 		rOk   = reply{250, "noted."}
 		rSize = reply{552, "bit too much"}
@@ -244,7 +244,7 @@ func data(
 	mailman *delivery.Mailman,
 	cache *storage.Cache,
 	maxSize int64,
-	hooks ...hook.DataHook,
+	hooks []hook.DataHook,
 ) handler {
 	var (
 		rData = reply{354, "go ahead. period."}

@@ -37,6 +37,9 @@ type Config struct {
 	Mailman  *delivery.Mailman
 	Cache    *storage.Cache
 	TLS      *tls.Config
+
+	FromHooks []hook.FromHook
+	DataHooks []hook.DataHook
 }
 
 type proto struct {
@@ -53,11 +56,10 @@ func New(config *Config) textproto.Protocol {
 				fmt.Sprintf("STARTTLS"),
 			),
 
-			"MAIL": mail(config.MaxSize,
-				hook.CheckSPF(),
-			),
+			"MAIL": mail(config.MaxSize, config.FromHooks),
 			"RCPT": rcpt(config.Mailman),
-			"DATA": data(config.Mailman, config.Cache, config.MaxSize),
+			"DATA": data(config.Mailman, config.Cache, config.MaxSize,
+				config.DataHooks),
 
 			"NOOP": noop(),
 			"RSET": rset(),
