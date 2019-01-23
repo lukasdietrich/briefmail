@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/smtp/hook"
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
@@ -55,6 +56,7 @@ type session struct {
 
 	state    sessionState
 	envelope model.Envelope
+	headers  []hook.HeaderField
 }
 
 func (s *session) send(r *reply) error {

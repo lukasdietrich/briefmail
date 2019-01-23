@@ -25,6 +25,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/storage"
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
@@ -33,6 +34,7 @@ type Config struct {
 	Hostname string
 	MaxSize  int64
 	Mailman  *delivery.Mailman
+	Cache    *storage.Cache
 	TLS      *tls.Config
 }
 
@@ -52,7 +54,7 @@ func New(config *Config) textproto.Protocol {
 
 			"MAIL": mail(config.MaxSize),
 			"RCPT": rcpt(config.Mailman),
-			"DATA": data(config.Mailman, config.MaxSize),
+			"DATA": data(config.Mailman, config.Cache, config.MaxSize),
 
 			"NOOP": noop(),
 			"RSET": rset(),

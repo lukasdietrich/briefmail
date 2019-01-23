@@ -21,11 +21,14 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"strconv"
 	"time"
 
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/smtp/hook"
+	"github.com/lukasdietrich/briefmail/storage"
 )
 
 var (
@@ -104,6 +107,7 @@ func rset() handler {
 
 		s.envelope.From = nil
 		s.envelope.To = nil
+		s.headers = nil
 
 		return s.send(&rOk)
 	}
@@ -132,7 +136,7 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(maxSize int64) handler {
+func mail(maxSize int64, hooks ...hook.FromHook) handler {
 	var (
 		rOk   = reply{250, "noted."}
 		rSize = reply{552, "bit too much"}
@@ -167,6 +171,25 @@ func mail(maxSize int64) handler {
 			}
 		}
 
+		var (
+			ip      = net.ParseIP(s.RemoteAddr())
+			headers []hook.HeaderField
+		)
+
+		for _, hook := range hooks {
+			result, err := hook(ip, from)
+			if err != nil {
+				return err
+			}
+
+			if result.Reject {
+				return s.send(&reply{result.Code, result.Text})
+			}
+
+			headers = append(headers, result.Headers...)
+		}
+
+		s.headers = headers
 		s.envelope.From = from
 		s.state = sMail
 
@@ -217,7 +240,12 @@ func rcpt(mailman *delivery.Mailman) handler {
 // `DATA` command as specified in RFC#5321 4.1.1.4
 //
 //     "DATA" CRLF
-func data(mailman *delivery.Mailman, maxSize int64) handler {
+func data(
+	mailman *delivery.Mailman,
+	cache *storage.Cache,
+	maxSize int64,
+	hooks ...hook.DataHook,
+) handler {
 	var (
 		rData = reply{354, "go ahead. period."}
 		rOk   = reply{250, "confirmed transfer."}
@@ -254,7 +282,12 @@ func data(mailman *delivery.Mailman, maxSize int64) handler {
 			s.envelope.From,
 			s.envelope.Date.Format(time.RFC1123Z)))
 
-		if err := mailman.Deliver(&s.envelope, body); err != nil {
+		for _, header := range s.headers {
+			body.Prepend(header.Key, header.Value)
+		}
+
+		entry, err := cache.Write(body)
+		if err != nil {
 			if err == errReaderLimitReached {
 				// discard remaining bytes (but not forever) to flush
 				// the input stream
@@ -266,6 +299,42 @@ func data(mailman *delivery.Mailman, maxSize int64) handler {
 				return s.send(&rSize)
 			}
 
+			return err
+		}
+
+		defer entry.Release()
+
+		var headers []hook.HeaderField
+
+		for _, hook := range hooks {
+			r, err := entry.Reader()
+			if err != nil {
+				return err
+			}
+
+			result, err := hook(r)
+			if err != nil {
+				return err
+			}
+
+			if result.Reject {
+				return s.send(&reply{result.Code, result.Text})
+			}
+
+			headers = append(headers, result.Headers...)
+		}
+
+		r, err = entry.Reader()
+		if err != nil {
+			return err
+		}
+
+		body = model.Body{Reader: r}
+		for _, header := range headers {
+			body.Prepend(header.Key, header.Value)
+		}
+
+		if err := mailman.Deliver(&s.envelope, body); err != nil {
 			return err
 		}
 
