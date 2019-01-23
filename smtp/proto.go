@@ -25,6 +25,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/smtp/hook"
 	"github.com/lukasdietrich/briefmail/storage"
 	"github.com/lukasdietrich/briefmail/textproto"
 )
@@ -52,7 +53,9 @@ func New(config *Config) textproto.Protocol {
 				fmt.Sprintf("STARTTLS"),
 			),
 
-			"MAIL": mail(config.MaxSize),
+			"MAIL": mail(config.MaxSize,
+				hook.CheckSPF(),
+			),
 			"RCPT": rcpt(config.Mailman),
 			"DATA": data(config.Mailman, config.Cache, config.MaxSize),
 
