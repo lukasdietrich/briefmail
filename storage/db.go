@@ -351,31 +351,60 @@ func (d *DB) DeleteFromQueue(id int64) error {
 	})
 }
 
-func (d *DB) IsOrphan(mail model.ID) (bool, error) {
-	var isOrphan bool
+func (d *DB) DeleteOrphans() ([]model.ID, error) {
+	var orphans []model.ID
 
-	return isOrphan, d.do(func(tx *sql.Tx) error {
-		var count int
-
-		err := tx.QueryRow(
+	return orphans, d.do(func(tx *sql.Tx) error {
+		rows, err := tx.Query(
 			`
-			select count(*)
-			from "entries"
-			where "mail" = ? ;
-			`, mail).Scan(&count)
+			select "uuid"
+			from "mails"
+			where (
+					select count(*)
+					from "entries"
+					where "mail" = "uuid"
+				  ) = 0
+			  and (
+			  		select count(*)
+			  		from "queue"
+			  		where "mail" = "uuid"
+			  	  ) = 0 ;
+			`)
 
-		if err != nil || count > 0 {
+		if err != nil {
 			return err
 		}
 
-		err = tx.QueryRow(
-			`
-			select count(*)
-			from "queue"
-			where "mail" = ? ;
-			`, mail).Scan(&count)
+		defer rows.Close()
 
-		isOrphan = count <= 0
-		return err
+		var orphan model.ID
+
+		for rows.Next() {
+			if err := rows.Scan(&orphan); err != nil {
+				return err
+			}
+
+			orphans = append(orphans, orphan)
+		}
+
+		stmt, err := tx.Prepare(
+			`
+			delete from "mails"
+			where "uuid" = ? ;
+			`)
+
+		if err != nil {
+			return err
+		}
+
+		defer stmt.Close()
+
+		for _, orphan := range orphans {
+			if _, err := stmt.Exec(orphan); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	})
 }

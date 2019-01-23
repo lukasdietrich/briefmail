@@ -109,7 +109,7 @@ func pass(l *locks, db *storage.DB) handler {
 // `QUIT` command as specified in RFC#1939
 //
 //     "QUIT" CRLF
-func quit(db *storage.DB) handler {
+func quit(db *storage.DB, blobs *storage.Blobs) handler {
 	return func(s *session, _ *command) error {
 		if s.state.in(sTransaction) {
 			mails := make([]model.ID, 0, len(s.mailbox.marks))
@@ -120,6 +120,15 @@ func quit(db *storage.DB) handler {
 
 			if err := db.DeleteEntries(mails, s.mailbox.id); err != nil {
 				return err
+			}
+
+			orphans, err := db.DeleteOrphans()
+			if err != nil {
+				return err
+			}
+
+			for _, orphan := range orphans {
+				blobs.Delete(orphan)
 			}
 		}
 

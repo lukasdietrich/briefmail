@@ -58,7 +58,7 @@ func New(config *Config) textproto.Protocol {
 
 			"NOOP": noop(),
 			"RSET": rset(),
-			"QUIT": quit(config.DB),
+			"QUIT": quit(config.DB, config.Blobs),
 
 			"STLS": stls(config.TLS),
 		},
