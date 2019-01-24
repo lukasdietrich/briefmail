@@ -36,6 +36,7 @@ type Config struct {
 	MaxSize  int64
 	Mailman  *delivery.Mailman
 	Cache    *storage.Cache
+	DB       *storage.DB
 	TLS      *tls.Config
 
 	FromHooks []hook.FromHook
@@ -54,6 +55,7 @@ func New(config *Config) textproto.Protocol {
 			"EHLO": ehlo(config.Hostname,
 				fmt.Sprintf("SIZE %d", config.MaxSize),
 				fmt.Sprintf("STARTTLS"),
+				fmt.Sprintf("AUTH %s %s", "PLAIN", "LOGIN"),
 			),
 
 			"MAIL": mail(config.MaxSize, config.FromHooks),
@@ -67,6 +69,7 @@ func New(config *Config) textproto.Protocol {
 			"QUIT": quit(),
 
 			"STARTTLS": starttls(config.TLS),
+			"AUTH":     auth(config.DB),
 		},
 	}
 }

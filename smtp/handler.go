@@ -16,13 +16,16 @@
 package smtp
 
 import (
+	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lukasdietrich/briefmail/delivery"
@@ -367,5 +370,107 @@ func starttls(config *tls.Config) handler {
 		}
 
 		return s.UpgradeTLS(config)
+	}
+}
+
+// `AUTH` command as specified in RFC#4954
+//
+//     "AUTH" <Mechanism> [ Payload ] CRLF
+func auth(db *storage.DB) handler {
+	var (
+		rUsername = reply{334, "VXNlcm5hbWU6"}
+		rPassword = reply{334, "UGFzc3dvcmQ6"}
+		rOk       = reply{235, "I was sure I saw you before."}
+		rFail     = reply{535, "Solid attempt."}
+	)
+
+	return func(s *session, c *command) error {
+		if !s.state.in(sHelo) {
+			return errBadSequence
+		}
+
+		var (
+			fields = bytes.Fields(c.tail)
+			name   string
+			pass   string
+		)
+
+		if len(fields) < 1 {
+			return errCommandSyntax
+		}
+
+		switch strings.ToUpper(string(fields[0])) {
+		case "PLAIN":
+			if len(fields) != 2 {
+				return errCommandSyntax
+			}
+
+			b, err := base64.StdEncoding.DecodeString(string(fields[1]))
+			if err != nil {
+				return errCommandSyntax
+			}
+
+			fields = bytes.Split(b, []byte{0})
+			if len(fields) != 3 {
+				return errCommandSyntax
+			}
+
+			if len(fields[0]) > 0 {
+				if !bytes.Equal(fields[0], fields[1]) {
+					return s.send(&rFail)
+				}
+			}
+
+			name = string(fields[1])
+			pass = string(fields[2])
+
+		case "LOGIN":
+			if err := s.send(&rUsername); err != nil {
+				return err
+			}
+
+			b, err := s.ReadLine()
+			if err != nil {
+				return err
+			}
+
+			b, err = base64.StdEncoding.DecodeString(string(b))
+			if err != nil {
+				return errCommandSyntax
+			}
+
+			name = string(b)
+
+			if err := s.send(&rPassword); err != nil {
+				return err
+			}
+
+			b, err = s.ReadLine()
+			if err != nil {
+				return err
+			}
+
+			b, err = base64.StdEncoding.DecodeString(string(b))
+			if err != nil {
+				return errCommandSyntax
+			}
+
+			pass = string(b)
+
+		default:
+			return errCommandSyntax
+		}
+
+		mailbox, ok, err := db.Authenticate(name, pass)
+		if err != nil {
+			return err
+		}
+
+		if ok {
+			s.mailbox = &mailbox
+			return s.send(&rOk)
+		}
+
+		return s.send(&rFail)
 	}
 }

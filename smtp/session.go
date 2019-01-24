@@ -57,6 +57,7 @@ type session struct {
 	state    sessionState
 	envelope model.Envelope
 	headers  []hook.HeaderField
+	mailbox  *int64
 }
 
 func (s *session) send(r *reply) error {
