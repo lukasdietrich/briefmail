@@ -13,27 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package hook
+package normalize
 
-import (
-	"io"
-	"net"
+import "strings"
 
-	"github.com/lukasdietrich/briefmail/model"
-)
-
-type HeaderField struct {
-	Key   string
-	Value string
+func Domain(s string) (string, error) {
+	return strings.ToLower(s), nil
 }
 
-type Result struct {
-	Reject bool
-
-	Headers []HeaderField
-	Code    int
-	Text    string
+func User(s string) (string, error) {
+	return strings.ToLower(s), nil
 }
-
-type FromHook func(bool, net.IP, *model.Address) (*Result, error)
-type DataHook func(bool, io.Reader) (*Result, error)

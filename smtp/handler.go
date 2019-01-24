@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lukasdietrich/briefmail/addressbook"
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/smtp/hook"
@@ -180,7 +181,7 @@ func mail(maxSize int64, hooks []hook.FromHook) handler {
 		)
 
 		for _, hook := range hooks {
-			result, err := hook(ip, from)
+			result, err := hook(s.mailbox != nil, ip, from)
 			if err != nil {
 				return err
 			}
@@ -203,7 +204,7 @@ func mail(maxSize int64, hooks []hook.FromHook) handler {
 // `RCPT` command as specified in RFC#5321 4.1.1.3
 //
 //     "RCPT TO:<" <Forward-path> ">" [ SP Paramters ] CRLF
-func rcpt(mailman *delivery.Mailman) handler {
+func rcpt(mailman *delivery.Mailman, book *addressbook.Book) handler {
 	var (
 		rOk                = reply{250, "yup, another?"}
 		rTooManyRecipients = reply{452, "that is quite a crowd already!"}
@@ -229,7 +230,15 @@ func rcpt(mailman *delivery.Mailman) handler {
 			return err
 		}
 
-		if !mailman.IsDeliverable(to, true) {
+		entry := book.Lookup(to)
+
+		if entry == nil {
+			// no entry found
+			return s.send(&rInvalidRecipient)
+		}
+
+		if s.mailbox == nil && entry.Kind == addressbook.Remote {
+			// attempt to relay
 			return s.send(&rInvalidRecipient)
 		}
 
@@ -315,7 +324,7 @@ func data(
 				return err
 			}
 
-			result, err := hook(r)
+			result, err := hook(s.mailbox != nil, r)
 			if err != nil {
 				return err
 			}

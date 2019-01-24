@@ -18,6 +18,8 @@ package model
 import (
 	"errors"
 	"strings"
+
+	"github.com/lukasdietrich/briefmail/normalize"
 )
 
 var (
@@ -43,10 +45,20 @@ func ParseAddress(raw string) (*Address, error) {
 	}
 
 	if i := strings.LastIndex(raw, "@"); i > -1 {
+		user, err := normalize.User(raw[:i])
+		if err != nil {
+			return nil, err
+		}
+
+		domain, err := normalize.Domain(raw[i+1:])
+		if err != nil {
+			return nil, err
+		}
+
 		addr := Address{
 			raw:    raw,
-			User:   raw[:i],
-			Domain: strings.ToLower(raw[i+1:]),
+			User:   user,
+			Domain: domain,
 		}
 
 		// see RFC#5321 4.5.3.1

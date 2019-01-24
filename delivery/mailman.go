@@ -17,7 +17,6 @@ package delivery
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lukasdietrich/briefmail/addressbook"
 	"github.com/lukasdietrich/briefmail/model"
@@ -25,36 +24,17 @@ import (
 )
 
 type Mailman struct {
-	config  *Config
-	domains map[string]bool
+	config *Config
 }
 
 type Config struct {
-	DB           *storage.DB
-	Blobs        *storage.Blobs
-	LocalDomains []string
-	Book         *addressbook.Book
+	DB    *storage.DB
+	Blobs *storage.Blobs
+	Book  *addressbook.Book
 }
 
 func NewMailman(config *Config) *Mailman {
-	domains := make(map[string]bool)
-	for _, domain := range config.LocalDomains {
-		domains[strings.ToLower(domain)] = true
-	}
-
-	return &Mailman{
-		config:  config,
-		domains: domains,
-	}
-}
-
-func (m *Mailman) IsDeliverable(address *model.Address, local bool) bool {
-	if m.domains[address.Domain] {
-		_, ok := m.config.Book.Lookup(address)
-		return ok
-	}
-
-	return !local
+	return &Mailman{config: config}
 }
 
 func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
@@ -69,50 +49,37 @@ func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 		return err
 	}
 
-	local, remote := m.partitionRecipients(envelope)
+	var (
+		mailboxes []int64
+		queue     []*model.Address
+	)
 
-	if len(remote) > 0 {
-		if err := m.config.DB.AddToQueue(id, remote); err != nil {
+	for _, addr := range envelope.To {
+		entry := m.config.Book.Lookup(addr)
+		if entry == nil {
+			return fmt.Errorf("could not deliver to %s", addr)
+		}
+
+		switch entry.Kind {
+		case addressbook.Local:
+			mailboxes = append(mailboxes, *entry.Mailbox)
+
+		case addressbook.Forward, addressbook.Remote:
+			queue = append(queue, entry.Address)
+		}
+	}
+
+	if len(queue) > 0 {
+		if err := m.config.DB.AddToQueue(id, queue); err != nil {
 			return err
 		}
 	}
 
-	if len(local) > 0 {
-		var mailboxes []int64
-
-		for _, address := range local {
-			entry, ok := m.config.Book.Lookup(address)
-			if !ok {
-				return fmt.Errorf("could not deliver to %s", address)
-			}
-
-			switch entry.Kind {
-			case addressbook.Local:
-				mailboxes = append(mailboxes, *entry.Mailbox)
-			}
-		}
-
-		if len(mailboxes) > 0 {
-			if err := m.config.DB.AddEntries(id, mailboxes); err != nil {
-				return err
-			}
+	if len(mailboxes) > 0 {
+		if err := m.config.DB.AddEntries(id, mailboxes); err != nil {
+			return err
 		}
 	}
 
 	return nil
-}
-
-func (m *Mailman) partitionRecipients(envelope *model.Envelope) (
-	local []*model.Address,
-	remote []*model.Address,
-) {
-	for _, to := range envelope.To {
-		if m.domains[to.Domain] {
-			local = append(local, to)
-		} else {
-			remote = append(remote, to)
-		}
-	}
-
-	return
 }

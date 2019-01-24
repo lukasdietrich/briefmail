@@ -31,8 +31,8 @@ const (
 func Blacklist(dnsbl string) FromHook {
 	dnsbl = dns.Fqdn(dnsbl)
 
-	return func(ip net.IP, _ *model.Address) (*Result, error) {
-		if ip.To4() == nil {
+	return func(submission bool, ip net.IP, _ *model.Address) (*Result, error) {
+		if submission || ip.To4() == nil {
 			return &Result{}, nil
 		}
 

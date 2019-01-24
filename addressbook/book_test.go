@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/normalize"
 )
 
 func TestSimple(t *testing.T) {
@@ -31,7 +32,11 @@ func TestSimple(t *testing.T) {
 		user2AtHost2 = makeEntry(3)
 	)
 
+	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
+	assert.Nil(t, err)
+
 	book := Book{
+		domains: domains,
 		entries: map[string]map[string]*Entry{
 			"host1": {
 				"user1": user1AtHost1,
@@ -50,11 +55,13 @@ func TestSimple(t *testing.T) {
 		"user2@host1": user2AtHost1,
 		"user2@host2": user2AtHost2,
 		"user3@host1": nil,
-		"user1@host3": nil,
+		"user1@host3": &Entry{
+			Kind:    Remote,
+			Address: mustAddress("user1@host3"),
+		},
 	} {
 		t.Run(addr, func(t *testing.T) {
-			actual, ok := book.Lookup(mustAddress(addr))
-			assert.Equal(t, entry != nil, ok)
+			actual := book.Lookup(mustAddress(addr))
 			assert.Equal(t, entry, actual)
 		})
 	}
@@ -68,7 +75,11 @@ func TestWildcard(t *testing.T) {
 		anyAtAny     = makeEntry(3)
 	)
 
+	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
+	assert.Nil(t, err)
+
 	book := Book{
+		domains: domains,
 		entries: map[string]map[string]*Entry{
 			"host1": {
 				"user1": user1AtHost1,
@@ -88,8 +99,7 @@ func TestWildcard(t *testing.T) {
 		"user2@host2": anyAtAny,
 	} {
 		t.Run(addr, func(t *testing.T) {
-			actual, ok := book.Lookup(mustAddress(addr))
-			assert.True(t, ok)
+			actual := book.Lookup(mustAddress(addr))
 			assert.Equal(t, entry, actual)
 		})
 	}

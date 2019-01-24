@@ -25,7 +25,11 @@ import (
 )
 
 func CheckSPF() FromHook {
-	return func(ip net.IP, from *model.Address) (*Result, error) {
+	return func(submission bool, ip net.IP, from *model.Address) (*Result, error) {
+		if submission {
+			return &Result{}, nil
+		}
+
 		result, _, err := spf.CheckHost(ip, from.Domain, from.String())
 
 		switch result {

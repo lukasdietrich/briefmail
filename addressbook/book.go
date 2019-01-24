@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/normalize"
 )
 
 type EntryKind int
@@ -26,12 +27,14 @@ type EntryKind int
 const (
 	Local EntryKind = iota
 	Forward
+	Remote
 )
 
 type Entry struct {
-	Kind    EntryKind
+	Kind EntryKind
+
 	Mailbox *int64
-	Forward *model.Address
+	Address *model.Address
 }
 
 func (e *Entry) String() string {
@@ -39,36 +42,46 @@ func (e *Entry) String() string {
 	case Local:
 		return fmt.Sprintf("local(mailbox=%d)", *e.Mailbox)
 	case Forward:
-		return fmt.Sprintf("forward(to=%s)", e.Forward)
+		return fmt.Sprintf("forward(address=%s)", e.Address)
+	case Remote:
+		return fmt.Sprintf("remote(address=%s)", e.Address)
 	}
 
 	return ""
 }
 
 type Book struct {
+	domains *normalize.Set
 	entries map[string]map[string]*Entry
 }
 
-func (b *Book) Lookup(addr *model.Address) (*Entry, bool) {
-	entry, ok := lookupInDomain(b.entries[addr.Domain], addr)
-	if ok {
-		return entry, true
-	}
-
-	entry, ok = lookupInDomain(b.entries["*"], addr)
-	return entry, ok
+func (b *Book) SetLocalDomains(domains *normalize.Set) {
+	b.domains = domains
 }
 
-func lookupInDomain(domain map[string]*Entry, addr *model.Address) (*Entry, bool) {
+func (b *Book) Lookup(addr *model.Address) *Entry {
+	if !b.domains.Contains(addr.Domain) {
+		return &Entry{
+			Kind:    Remote,
+			Address: addr,
+		}
+	}
+
+	if entry := lookupInDomain(b.entries[addr.Domain], addr); entry != nil {
+		return entry
+	}
+
+	return lookupInDomain(b.entries["*"], addr)
+}
+
+func lookupInDomain(domain map[string]*Entry, addr *model.Address) *Entry {
 	if domain == nil {
-		return nil, false
+		return nil
 	}
 
-	entry, ok := domain[addr.User]
-	if ok {
-		return entry, true
+	if entry := domain[addr.User]; entry != nil {
+		return entry
 	}
 
-	entry, ok = domain["*"]
-	return entry, ok
+	return domain["*"]
 }

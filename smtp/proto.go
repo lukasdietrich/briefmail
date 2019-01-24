@@ -23,6 +23,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/lukasdietrich/briefmail/addressbook"
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/smtp/hook"
@@ -35,6 +36,7 @@ type Config struct {
 	Hostname string
 	MaxSize  int64
 	Mailman  *delivery.Mailman
+	Book     *addressbook.Book
 	Cache    *storage.Cache
 	DB       *storage.DB
 	TLS      *tls.Config
@@ -59,7 +61,7 @@ func New(config *Config) textproto.Protocol {
 			),
 
 			"MAIL": mail(config.MaxSize, config.FromHooks),
-			"RCPT": rcpt(config.Mailman),
+			"RCPT": rcpt(config.Mailman, config.Book),
 			"DATA": data(config.Mailman, config.Cache, config.MaxSize,
 				config.DataHooks),
 
