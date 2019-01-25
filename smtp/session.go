@@ -60,6 +60,10 @@ type session struct {
 	mailbox  *int64
 }
 
+func (s *session) isSubmission() bool {
+	return s.mailbox != nil
+}
+
 func (s *session) send(r *reply) error {
 	if err := s.SetWriteTimeout(time.Minute * 5); err != nil {
 		return err

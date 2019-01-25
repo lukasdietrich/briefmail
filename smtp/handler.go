@@ -140,10 +140,11 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(maxSize int64, hooks []hook.FromHook) handler {
+func mail(book *addressbook.Book, maxSize int64, hooks []hook.FromHook) handler {
 	var (
 		rOk   = reply{250, "noted."}
 		rSize = reply{552, "bit too much"}
+		rAuth = reply{530, "that does not sound like you"}
 	)
 
 	return func(s *session, c *command) error {
@@ -159,6 +160,28 @@ func mail(maxSize int64, hooks []hook.FromHook) handler {
 		from, err := model.ParseAddress(arg)
 		if err != nil {
 			return err
+		}
+
+		entry := book.Lookup(from)
+
+		if s.isSubmission() {
+			// authenticated connections must send
+			// mails from a local address, which
+			// the current user owns
+
+			if entry == nil ||
+				entry.Kind != addressbook.Local ||
+				*entry.Mailbox != *s.mailbox {
+				return s.send(&rAuth)
+			}
+		} else {
+			// unauthenticated connections must send
+			// mails from a remote address
+
+			if entry == nil ||
+				entry.Kind == addressbook.Local {
+				return s.send(&rAuth)
+			}
 		}
 
 		// see RFC#1870 "6. The extended MAIL command"
@@ -181,7 +204,7 @@ func mail(maxSize int64, hooks []hook.FromHook) handler {
 		)
 
 		for _, hook := range hooks {
-			result, err := hook(s.mailbox != nil, ip, from)
+			result, err := hook(s.isSubmission(), ip, from)
 			if err != nil {
 				return err
 			}
@@ -324,7 +347,7 @@ func data(
 				return err
 			}
 
-			result, err := hook(s.mailbox != nil, r)
+			result, err := hook(s.isSubmission(), r)
 			if err != nil {
 				return err
 			}

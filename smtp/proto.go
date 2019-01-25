@@ -60,7 +60,7 @@ func New(config *Config) textproto.Protocol {
 				fmt.Sprintf("AUTH %s %s", "PLAIN", "LOGIN"),
 			),
 
-			"MAIL": mail(config.MaxSize, config.FromHooks),
+			"MAIL": mail(config.Book, config.MaxSize, config.FromHooks),
 			"RCPT": rcpt(config.Mailman, config.Book),
 			"DATA": data(config.Mailman, config.Cache, config.MaxSize,
 				config.DataHooks),
