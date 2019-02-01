@@ -260,7 +260,7 @@ func rcpt(mailman *delivery.Mailman, book *addressbook.Book) handler {
 			return s.send(&rInvalidRecipient)
 		}
 
-		if s.mailbox == nil && entry.Kind == addressbook.Remote {
+		if !s.isSubmission() && entry.Kind == addressbook.Remote {
 			// attempt to relay
 			return s.send(&rInvalidRecipient)
 		}

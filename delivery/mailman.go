@@ -24,28 +24,21 @@ import (
 )
 
 type Mailman struct {
-	config *Config
-}
-
-type Config struct {
 	DB    *storage.DB
 	Blobs *storage.Blobs
 	Book  *addressbook.Book
-}
-
-func NewMailman(config *Config) *Mailman {
-	return &Mailman{config: config}
+	Queue *QueueWorker
 }
 
 func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 	offset := mail.Prepend("Return-Path", fmt.Sprintf("<%s>", envelope.From))
-	id, size, err := m.config.Blobs.Write(mail)
+	id, size, err := m.Blobs.Write(mail)
 	if err != nil {
 		return err
 	}
 
-	if err := m.config.DB.AddMail(id, size, offset, envelope); err != nil {
-		m.config.Blobs.Delete(id)
+	if err := m.DB.AddMail(id, size, offset, envelope); err != nil {
+		m.Blobs.Delete(id)
 		return err
 	}
 
@@ -55,7 +48,7 @@ func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 	)
 
 	for _, addr := range envelope.To {
-		entry := m.config.Book.Lookup(addr)
+		entry := m.Book.Lookup(addr)
 		if entry == nil {
 			return fmt.Errorf("could not deliver to %s", addr)
 		}
@@ -69,16 +62,18 @@ func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 		}
 	}
 
-	if len(queue) > 0 {
-		if err := m.config.DB.AddToQueue(id, queue); err != nil {
+	if len(mailboxes) > 0 {
+		if err := m.DB.AddEntries(id, mailboxes); err != nil {
 			return err
 		}
 	}
 
-	if len(mailboxes) > 0 {
-		if err := m.config.DB.AddEntries(id, mailboxes); err != nil {
+	if len(queue) > 0 {
+		if err := m.DB.AddToQueue(id, queue); err != nil {
 			return err
 		}
+
+		m.Queue.WakeUp()
 	}
 
 	return nil

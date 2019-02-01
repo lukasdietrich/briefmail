@@ -17,6 +17,8 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -38,22 +40,22 @@ func NewDB(fileName string) (*DB, error) {
 	_, err = db.Exec(
 		`
 		create table if not exists "mailboxes" (
-			"id"      integer         primary key autoincrement ,
-			"name"    varchar ( 64 )  unique ,
-			"hash"    blob            not null
+			"id"       integer         primary key autoincrement ,
+			"name"     varchar ( 64 )  unique ,
+			"hash"     blob            not null
 		) ;
 
 		create table if not exists "mails" (
-			"uuid"    char ( 36 )     primary key ,
-			"date"    integer         not null ,
-			"from"    varchar ( 256 ) not null ,
-			"size"    integer         not null ,
-			"offset"  integer         not null
+			"uuid"     char ( 36 )     primary key ,
+			"date"     integer         not null ,
+			"from"     varchar ( 256 ) not null ,
+			"size"     integer         not null ,
+			"offset"   integer         not null
 		) ;
 
 		create table if not exists "entries" (
-			"mailbox" integer         not null ,
-			"mail"    char ( 36 )     not null ,
+			"mailbox"  integer         not null ,
+			"mail"     char ( 36 )     not null ,
 
 			primary key ( "mailbox", "mail" ) ,
 			foreign key ( "mailbox" ) references "mailboxes" ( "id"   ) ,
@@ -61,11 +63,10 @@ func NewDB(fileName string) (*DB, error) {
 		) ;
 
 		create table if not exists "queue" (
-			"id"      integer         primary key autoincrement ,
-			"mail"    char ( 36 )     not null ,
-			"to"      varchar ( 256 ) not null ,
-			"count"   integer         not null ,
-			"date"    integer         not null ,
+			"mail"     char ( 36 )     primary key ,
+			"date"     integer         not null ,
+			"attempts" integer         not null ,
+			"to"       blob            not null ,
 
 			foreign key ( "mail" ) references "mails" ( "uuid" )
 		) ;
@@ -192,6 +193,36 @@ func (d *DB) Authenticate(name, pass string) (int64, bool, error) {
 	})
 }
 
+type Mail struct {
+	ID     model.ID
+	Date   time.Time
+	From   *model.Address
+	Size   int64
+	Offset int64
+}
+
+func (d *DB) Mail(id model.ID) (*Mail, error) {
+	var m Mail
+
+	return &m, d.do(func(tx *sql.Tx) error {
+		var _date int64
+
+		err := tx.QueryRow(
+			`
+			select "date", "from", "size", "offset"
+			from "mails"
+			where "uuid" = ? ;
+			`, id).Scan(&_date, &m.From, &m.Size, &m.Offset)
+
+		if err != nil {
+			return err
+		}
+
+		m.Date = time.Unix(_date, 0)
+		return nil
+	})
+}
+
 func (d *DB) AddMail(id model.ID, size, offset int64, envelope *model.Envelope) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
@@ -313,39 +344,84 @@ func (d *DB) DeleteEntries(mails []model.ID, mailbox int64) error {
 	})
 }
 
-func (d *DB) AddToQueue(mail model.ID, to []*model.Address) error {
-	return d.do(func(tx *sql.Tx) error {
-		stmt, err := tx.Prepare(
+type QueueElement struct {
+	Mail     model.ID
+	Date     time.Time
+	Attempts int
+	To       []*model.Address
+}
+
+func (d *DB) PeekQueue() (*QueueElement, error) {
+	var (
+		element QueueElement
+		_date   int64
+		_to     []byte
+	)
+
+	return &element, d.do(func(tx *sql.Tx) error {
+		err := tx.QueryRow(
 			`
-			insert into "queue"
-			( "mail", "to", "count", "date" )
-			values
-			( ?, ?, '0', '0' )
-			`)
+			select "mail", "date", "attempts", "to"
+			from "queue"
+			order by "date" asc
+			limit 1 ;
+			`).Scan(&element.Mail, &_date, &element.Attempts, &_to)
 
 		if err != nil {
 			return err
 		}
 
-		defer stmt.Close() // nolint:errcheck
-
-		for _, t := range to {
-			if _, err := stmt.Exec(mail, t.String()); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		element.Date = time.Unix(_date, 0)
+		return json.Unmarshal(_to, &element.To)
 	})
 }
 
-func (d *DB) DeleteFromQueue(id int64) error {
+func (d *DB) AddToQueue(mail model.ID, to []*model.Address) error {
+	_to, err := json.Marshal(to)
+	if err != nil {
+		return err
+	}
+
+	return d.do(func(tx *sql.Tx) error {
+		_, err := tx.Exec(
+			`
+			insert into "queue"
+			( "mail", "date", "attempts", "to" )
+			values
+			( ?, '0', '0', ? )
+			`, mail, _to)
+
+		return err
+	})
+}
+
+func (d *DB) UpdateQueue(mail model.ID, to []*model.Address, date time.Time) error {
+	_to, err := json.Marshal(to)
+	if err != nil {
+		return err
+	}
+
+	return d.do(func(tx *sql.Tx) error {
+		_, err := tx.Exec(
+			`
+			update "queue"
+			set "date" = ? ,
+			    "attempts" = "attempts" + 1 ,
+			    "to" = ?
+			where "mail" = ? ;
+			`, date.Unix(), _to, mail)
+
+		return err
+	})
+}
+
+func (d *DB) DeleteFromQueue(mail model.ID) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
 			delete from "queue"
-			where "id" = ? ;
-			`, id)
+			where "mail" = ? ;
+			`, mail)
 
 		return err
 	})

@@ -16,6 +16,7 @@
 package model
 
 import (
+	"database/sql/driver"
 	"errors"
 	"strings"
 
@@ -74,4 +75,37 @@ func ParseAddress(raw string) (*Address, error) {
 
 func (a *Address) String() string {
 	return a.raw
+}
+
+func (a *Address) Value() (driver.Value, error) {
+	return a.raw, nil
+}
+
+func (a *Address) Scan(v interface{}) error {
+	v, err := driver.String.ConvertValue(v)
+	if err != nil {
+		return err
+	}
+
+	b, err := ParseAddress(v.(string))
+	if err != nil {
+		return err
+	}
+
+	*a = *b
+	return nil
+}
+
+func (a *Address) MarshalText() ([]byte, error) {
+	return []byte(a.raw), nil
+}
+
+func (a *Address) UnmarshalText(v []byte) error {
+	b, err := ParseAddress(string(v))
+	if err != nil {
+		return err
+	}
+
+	*a = *b
+	return nil
 }
