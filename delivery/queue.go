@@ -115,13 +115,13 @@ func (q *QueueWorker) work() {
 
 func (q *QueueWorker) do(elem *storage.QueueElement) {
 	log := logrus.WithFields(logrus.Fields{
-		"mail":    elem.Mail,
+		"mail":    elem.MailID,
 		"attempt": elem.Attempts,
 	})
 
 	log.Info("attempting outbound delivery")
 
-	mail, err := q.DB.Mail(elem.Mail)
+	mail, err := q.DB.Mail(elem.MailID)
 	if err != nil {
 		log.Error(err)
 		return
@@ -166,7 +166,7 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 		tryAgain, nextAttempt := scheduleAttempt(elem.Attempts + 1)
 
 		if tryAgain {
-			err := q.DB.UpdateQueue(elem.Mail, pending, nextAttempt)
+			err := q.DB.UpdateQueue(elem.MailID, pending, nextAttempt)
 			if err != nil {
 				log.Error(err)
 			}
@@ -183,7 +183,7 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 	if len(pending) == 0 && len(undeliverable) == 0 {
 		log.Info("delivered mail to all recipients")
 
-		if err := q.DB.DeleteFromQueue(elem.Mail); err != nil {
+		if err := q.DB.DeleteFromQueue(elem.MailID); err != nil {
 			log.Error(err)
 		}
 	}

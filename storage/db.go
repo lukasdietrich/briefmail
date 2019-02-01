@@ -250,8 +250,8 @@ func (d *DB) DeleteMail(id model.ID) error {
 }
 
 type Entry struct {
-	Mail model.ID
-	Size int64
+	MailID model.ID
+	Size   int64
 }
 
 func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
@@ -281,7 +281,7 @@ func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
 		var entry Entry
 
 		for rows.Next() {
-			if err := rows.Scan(&entry.Mail, &entry.Size); err != nil {
+			if err := rows.Scan(&entry.MailID, &entry.Size); err != nil {
 				return err
 			}
 
@@ -345,7 +345,7 @@ func (d *DB) DeleteEntries(mails []model.ID, mailbox int64) error {
 }
 
 type QueueElement struct {
-	Mail     model.ID
+	MailID   model.ID
 	Date     time.Time
 	Attempts int
 	To       []*model.Address
@@ -365,7 +365,7 @@ func (d *DB) PeekQueue() (*QueueElement, error) {
 			from "queue"
 			order by "date" asc
 			limit 1 ;
-			`).Scan(&element.Mail, &_date, &element.Attempts, &_to)
+			`).Scan(&element.MailID, &_date, &element.Attempts, &_to)
 
 		if err != nil {
 			return err

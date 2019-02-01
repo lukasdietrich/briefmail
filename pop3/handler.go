@@ -115,7 +115,7 @@ func quit(db *storage.DB, blobs *storage.Blobs) handler {
 			mails := make([]model.ID, 0, len(s.mailbox.marks))
 
 			for n := range s.mailbox.marks {
-				mails = append(mails, s.mailbox.entries[int(n)].Mail)
+				mails = append(mails, s.mailbox.entries[int(n)].MailID)
 			}
 
 			if err := db.DeleteEntries(mails, s.mailbox.id); err != nil {
@@ -246,7 +246,7 @@ func retr(blobs *storage.Blobs) handler {
 			return err
 		}
 
-		r, err := blobs.Read(s.mailbox.entries[n].Mail)
+		r, err := blobs.Read(s.mailbox.entries[n].MailID)
 		if err != nil {
 			return err
 		}
