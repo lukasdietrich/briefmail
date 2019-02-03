@@ -40,7 +40,7 @@ type Conn interface {
 	SetWriteTimeout(time.Duration) error
 
 	// UpgradeTLS replaces the underlying network connection with a tls
-	// connection. Nothing happens, when an error occured.
+	// connection. Nothing happens, when an error occurred.
 	UpgradeTLS(*tls.Config) error
 
 	// IsTLS returns whether or not the connection is secured with tls.

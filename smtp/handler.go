@@ -91,7 +91,7 @@ func ehlo(hostname string, extensions ...string) handler {
 //
 //     "NOOP" CRLF
 func noop() handler {
-	rOk := reply{250, "nothing happend. as expected"}
+	rOk := reply{250, "nothing happened. as expected"}
 
 	return func(s *session, _ *command) error {
 		return s.send(&rOk)
@@ -226,7 +226,7 @@ func mail(book *addressbook.Book, maxSize int64, hooks []hook.FromHook) handler 
 
 // `RCPT` command as specified in RFC#5321 4.1.1.3
 //
-//     "RCPT TO:<" <Forward-path> ">" [ SP Paramters ] CRLF
+//     "RCPT TO:<" <Forward-path> ">" [ SP Parameters ] CRLF
 func rcpt(mailman *delivery.Mailman, book *addressbook.Book) handler {
 	var (
 		rOk                = reply{250, "yup, another?"}
