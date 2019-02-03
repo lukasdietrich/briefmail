@@ -208,8 +208,6 @@ func list() handler {
 		default:
 			return errInvalidSyntax
 		}
-
-		return nil
 	}
 }
 

@@ -30,9 +30,9 @@ func TestNilAddress(t *testing.T) {
 
 func TestAddress(t *testing.T) {
 	for raw, expected := range map[string]*Address{
-		"user1@host1": &Address{User: "user1", Domain: "host1"},
-		"@example":    &Address{User: "", Domain: "example"},
-		"someone@":    &Address{User: "someone", Domain: ""},
+		"user1@host1": {User: "user1", Domain: "host1"},
+		"@example":    {User: "", Domain: "example"},
+		"someone@":    {User: "someone", Domain: ""},
 		"someone":     nil,
 
 		fmt.Sprintf("%s@%s", longString(65), "example"):       nil,

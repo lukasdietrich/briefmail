@@ -55,7 +55,7 @@ func TestSimple(t *testing.T) {
 		"user2@host1": user2AtHost1,
 		"user2@host2": user2AtHost2,
 		"user3@host1": nil,
-		"user1@host3": &Entry{
+		"user1@host3": {
 			Kind:    Remote,
 			Address: mustAddress("user1@host3"),
 		},

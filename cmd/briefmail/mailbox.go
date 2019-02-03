@@ -29,7 +29,7 @@ func mailbox() cli.Command {
 		Name:  "mailbox",
 		Usage: "Manage mailboxes",
 		Subcommands: []cli.Command{
-			cli.Command{
+			{
 				Name:  "add",
 				Usage: "Add a new mailbox",
 				Action: func(ctx *cli.Context) error {
@@ -52,7 +52,7 @@ func mailbox() cli.Command {
 					return nil
 				},
 			},
-			cli.Command{
+			{
 				Name:  "passwd",
 				Usage: "Update a mailbox password",
 				Action: func(ctx *cli.Context) error {
