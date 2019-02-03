@@ -28,8 +28,8 @@ const (
 	dnsAddress = "1.1.1.1:53" // Cloudflare public dns
 )
 
-func Blacklist(dnsbl string) FromHook {
-	dnsbl = dns.Fqdn(dnsbl)
+func CheckDNSBL(server string) FromHook {
+	server = dns.Fqdn(server)
 
 	return func(submission bool, ip net.IP, _ *model.Address) (*Result, error) {
 		if submission || ip.To4() == nil {
@@ -37,7 +37,7 @@ func Blacklist(dnsbl string) FromHook {
 		}
 
 		var reversed [5]string
-		reversed[4] = dnsbl
+		reversed[4] = server
 		for i, part := range strings.Split(ip.String(), ".") {
 			reversed[3-i] = part
 		}

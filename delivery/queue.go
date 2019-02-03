@@ -177,7 +177,7 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 	}
 
 	if len(undeliverable) > 0 {
-		log.Info("could not deliver to %v", undeliverable)
+		log.Warnf("could not deliver to %v", undeliverable)
 	}
 
 	if len(pending) == 0 && len(undeliverable) == 0 {
