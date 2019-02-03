@@ -1,0 +1,4 @@
+[mailboxes]
+  "example" = [
+    "example@localhost",
+  ]

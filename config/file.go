@@ -15,15 +15,17 @@
 
 package config
 
-import "github.com/BurntSushi/toml"
+import (
+	"github.com/BurntSushi/toml"
+)
 
 type Config struct {
-	General
-	Mail
-	Hook
-	TLS
-	Smtp
-	Pop3
+	General General
+	Mail    Mail
+	Hook    Hook
+	TLS     TLS
+	Smtp    Smtp
+	Pop3    Pop3
 }
 
 func Parse(fileName string) (*Config, error) {

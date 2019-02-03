@@ -1,0 +1,41 @@
+[general]
+  # The local hostname which is used to greet incoming requests
+  hostname   = "localhost"
+
+  # A list of domains this server is accepting mails for
+  domains    = [ "localhost" ]
+
+[mail]
+  # Limit the maximum accepted mail size to be 25 MB
+  # see <https://tools.ietf.org/html/rfc1870>
+  size       = 26214400
+
+[hook.spf]
+  # Enable the "Sender Policy Framework (SPF)"
+  # see <https://tools.ietf.org/html/rfc7208>
+  enable     = true
+
+[hook.dnsbl]
+  # Enable blacklisting using "DNS Blacklists"
+  # see <https://tools.ietf.org/html/rfc5782>
+  enable     = true
+  servers    = [ "zen.spamhaus.org" ]
+
+[tls]
+  # Paths to the `*.pem` and `*.key` files of a tls certificate
+  pem        = "cert/briefmail.pem"
+  key        = "cert/briefmail.key"
+
+[[smtp]]
+  address    = ":25"
+
+[[smtp]]
+  address    = ":587"
+
+[[pop3]]
+  address    = ":110"
+
+[[pop3]]
+  address    = ":995"
+  # Force tls on port 995 from the start
+  tls        = true
