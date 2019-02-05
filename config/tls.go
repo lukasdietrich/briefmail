@@ -25,6 +25,10 @@ type TLS struct {
 }
 
 func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
+	if t.Pem == "" || t.Key == "" {
+		return nil, nil
+	}
+
 	cert, err := tls.LoadX509KeyPair(t.Pem, t.Key)
 	if err != nil {
 		return nil, err
