@@ -22,6 +22,8 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/storage"
 )
@@ -112,6 +114,12 @@ func pass(l *locks, db *storage.DB) handler {
 func quit(db *storage.DB, blobs *storage.Blobs) handler {
 	return func(s *session, _ *command) error {
 		if s.state.in(sTransaction) {
+			logrus.
+				WithField("mailbox", s.mailbox.id).
+				Debugf("pop3: end transaction (delete %d of %d)",
+					len(s.mailbox.marks),
+					len(s.mailbox.entries))
+
 			mails := make([]model.ID, 0, len(s.mailbox.marks))
 
 			for n := range s.mailbox.marks {

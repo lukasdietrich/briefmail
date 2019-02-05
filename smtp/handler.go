@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/addressbook"
 	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/model"
@@ -372,6 +374,8 @@ func data(
 		if err := mailman.Deliver(&s.envelope, body); err != nil {
 			return err
 		}
+
+		logrus.Debugf("smtp: received a mail from %s", s.envelope.From)
 
 		s.state = sHelo
 		return s.send(&rOk)
