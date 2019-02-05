@@ -21,6 +21,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 
 	"github.com/lukasdietrich/briefmail/storage"
 )
@@ -32,7 +33,7 @@ var (
 )
 
 func init() {
-	logrus.SetFormatter(&logrus.TextFormatter{
+	logrus.SetFormatter(&prefixed.TextFormatter{
 		FullTimestamp: true,
 	})
 }

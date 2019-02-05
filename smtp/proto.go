@@ -31,6 +31,8 @@ import (
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
+var log = logrus.WithField("prefix", "smtp")
+
 // Config contains options for the SMTP protocol
 type Config struct {
 	Hostname string
@@ -104,7 +106,7 @@ func (p *proto) Handle(c textproto.Conn) {
 	case io.EOF, errCloseSession, nil:
 		s.send(&rBye) // nolint:errcheck
 	default:
-		logrus.Warn(err)
+		log.Warn(err)
 		s.send(&rError) // nolint:errcheck
 	}
 }

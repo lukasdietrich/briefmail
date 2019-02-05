@@ -27,6 +27,8 @@ import (
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
+var log = logrus.WithField("prefix", "pop3")
+
 type Config struct {
 	Hostname string
 	DB       *storage.DB
@@ -94,7 +96,7 @@ func (p *proto) Handle(c textproto.Conn) {
 	case io.EOF, errCloseSession, nil:
 		s.send(&rBye)
 	default:
-		logrus.Warn(err)
+		log.Warn(err)
 
 		if errt, ok := err.(*net.OpError); ok && errt.Timeout() {
 			s.send(&rTimeout)
