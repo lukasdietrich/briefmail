@@ -147,8 +147,7 @@ func stat() handler {
 
 		return s.send(&reply{
 			true,
-			fmt.Sprintf("%d %d",
-				len(s.mailbox.entries), s.mailbox.size),
+			fmt.Sprintf("%d %d", len(s.mailbox.entries), s.mailbox.size),
 		})
 	}
 }
@@ -180,7 +179,7 @@ func list() handler {
 					continue
 				}
 
-				fmt.Fprintf(s, "%d %d", i, entry.Size)
+				fmt.Fprintf(s, "%d %d", i+1, entry.Size)
 				s.Endline()
 			}
 
@@ -195,14 +194,72 @@ func list() handler {
 				return errInvalidSyntax
 			}
 
+			n--
+
 			if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
 				return s.send(&rNoMessage)
 			}
 
 			return s.send(&reply{
 				true,
-				fmt.Sprintf("%d %d",
-					n, s.mailbox.entries[n].Size),
+				fmt.Sprintf("%d %d", n, s.mailbox.entries[n].Size),
+			})
+
+		default:
+			return errInvalidSyntax
+		}
+	}
+}
+
+// `UIDL` command as specified in RFC#1939
+//
+//     "UIDL" [ id ] CRLF
+func uidl() handler {
+	var (
+		rOk        = reply{true, "list follows"}
+		rNoMessage = reply{false, "no such message"}
+	)
+
+	return func(s *session, c *command) error {
+		if !s.state.in(sTransaction) {
+			return errBadSequence
+		}
+
+		args := c.args()
+
+		switch len(args) {
+		case 0:
+			s.send(&rOk)
+
+			for i, entry := range s.mailbox.entries {
+				if s.mailbox.marks[int64(i)] {
+					continue
+				}
+
+				fmt.Fprintf(s, "%d %s", i+1, entry.MailID)
+				s.Endline()
+			}
+
+			s.WriteString(".")
+			s.Endline()
+
+			return s.Flush()
+
+		case 1:
+			n, err := strconv.ParseInt(string(args[0]), 10, 64)
+			if err != nil {
+				return errInvalidSyntax
+			}
+
+			n--
+
+			if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
+				return s.send(&rNoMessage)
+			}
+
+			return s.send(&reply{
+				true,
+				fmt.Sprintf("%d %s", n, s.mailbox.entries[n].MailID),
 			})
 
 		default:
@@ -235,6 +292,8 @@ func retr(blobs *storage.Blobs) handler {
 		if err != nil {
 			return errInvalidSyntax
 		}
+
+		n--
 
 		if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
 			return s.send(&rNoMessage)
@@ -285,6 +344,8 @@ func dele() handler {
 		if err != nil {
 			return errInvalidSyntax
 		}
+
+		n--
 
 		if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
 			return s.send(&rNoMessage)
@@ -352,5 +413,30 @@ func stls(config *tls.Config) handler {
 		}
 
 		return s.UpgradeTLS(config)
+	}
+}
+
+// `CAPA` command as specified in RFC#2449
+//
+//     "CAPA" CRLF
+func capa(capabilities ...string) handler {
+	var (
+		rOk = reply{true, "I can do some things"}
+	)
+
+	return func(s *session, _ *command) error {
+		if err := s.send(&rOk); err != nil {
+			return err
+		}
+
+		for _, capability := range capabilities {
+			s.WriteString(capability) // nolint:errcheck
+			s.Endline()               // nolint:errcheck
+		}
+
+		s.WriteString(".")
+		s.Endline()
+
+		return s.Flush()
 	}
 }

@@ -48,11 +48,16 @@ func New(config *Config) textproto.Protocol {
 		config: config,
 		locks:  locks,
 		handlerMap: map[string]handler{
+			"CAPA": capa(
+				"USER",
+				"UIDL"),
+
 			"USER": user(),
 			"PASS": pass(locks, config.DB),
 
 			"STAT": stat(),
 			"LIST": list(),
+			"UIDL": uidl(),
 			"RETR": retr(config.Blobs),
 			"DELE": dele(),
 
