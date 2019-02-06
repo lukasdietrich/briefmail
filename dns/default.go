@@ -13,41 +13,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package hook
+package dns
 
-import (
-	"net"
-	"strings"
+import "github.com/miekg/dns"
 
-	"github.com/lukasdietrich/briefmail/dns"
-	"github.com/lukasdietrich/briefmail/model"
+var (
+	// cloudflare public dns
+	// see: https://blog.cloudflare.com/announcing-1111/
+	DefaultResolver = NewResolver("1.1.1.1:53")
 )
 
-func CheckDNSBL(server string) FromHook {
-	return func(submission bool, ip net.IP, _ *model.Address) (*Result, error) {
-		if submission || ip.To4() == nil {
-			return &Result{}, nil
-		}
+func QueryA(domain string) ([]*dns.A, error) {
+	return DefaultResolver.QueryA(domain)
+}
 
-		var reversed [5]string
-		reversed[4] = server
-		for i, part := range strings.Split(ip.String(), ".") {
-			reversed[3-i] = part
-		}
-
-		records, err := dns.QueryA(strings.Join(reversed[:], "."))
-		if err != nil {
-			return nil, err
-		}
-
-		if len(records) > 0 {
-			return &Result{
-				Reject: true,
-				Code:   550,
-				Text:   "I heard of you in the news!",
-			}, nil
-		}
-
-		return &Result{}, nil
-	}
+func QueryMX(domain string) ([]*dns.MX, error) {
+	return DefaultResolver.QueryMX(domain)
 }

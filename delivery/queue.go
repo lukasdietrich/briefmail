@@ -29,6 +29,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/lukasdietrich/briefmail/dns"
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/storage"
 )
@@ -236,22 +237,22 @@ func (c *client) close() {
 }
 
 func (c *client) connect(domain string) error {
-	records, err := net.LookupMX(domain)
+	records, err := dns.QueryMX(domain)
 	if err != nil {
 		return err
 	}
 
 	sort.Slice(records, func(i, j int) bool {
-		return records[i].Pref < records[j].Pref
+		return records[i].Preference < records[j].Preference
 	})
 
 	for _, record := range records {
-		c.conn, err = net.Dial("tcp", net.JoinHostPort(record.Host, "25"))
+		c.conn, err = net.Dial("tcp", net.JoinHostPort(record.Mx, "25"))
 		if err != nil {
 			continue
 		}
 
-		c.client, err = smtp.NewClient(c.conn, record.Host)
+		c.client, err = smtp.NewClient(c.conn, record.Mx)
 		if err != nil {
 			c.conn.Close()
 			continue
