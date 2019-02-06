@@ -30,7 +30,7 @@ func NewResolver(addr string) *Resolver {
 func (r *Resolver) query(domain string, t uint16) (*dns.Msg, error) {
 	m := dns.Msg{
 		Question: []dns.Question{{
-			Name:   domain,
+			Name:   dns.Fqdn(domain),
 			Qtype:  t,
 			Qclass: dns.ClassINET,
 		}},
