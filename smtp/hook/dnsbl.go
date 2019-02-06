@@ -19,6 +19,8 @@ import (
 	"net"
 	"strings"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/dns"
 	"github.com/lukasdietrich/briefmail/model"
 )
@@ -29,6 +31,11 @@ func CheckDNSBL(server string) FromHook {
 			return &Result{}, nil
 		}
 
+		log := logrus.WithFields(logrus.Fields{
+			"prefix": "dnsbl",
+			"ip":     ip,
+		})
+
 		var reversed [5]string
 		reversed[4] = server
 		for i, part := range strings.Split(ip.String(), ".") {
@@ -36,11 +43,15 @@ func CheckDNSBL(server string) FromHook {
 		}
 
 		records, err := dns.QueryA(strings.Join(reversed[:], "."))
+
 		if err != nil {
+			log.Debugf("error=%v", err)
 			return nil, err
 		}
 
 		if len(records) > 0 {
+			log.Debug("found sender in the blacklist")
+
 			return &Result{
 				Reject: true,
 				Code:   550,
@@ -48,6 +59,7 @@ func CheckDNSBL(server string) FromHook {
 			}, nil
 		}
 
+		log.Debug("no match in the blacklist")
 		return &Result{}, nil
 	}
 }

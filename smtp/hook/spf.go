@@ -19,18 +19,31 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/sirupsen/logrus"
 	"github.com/zaccone/spf"
 
 	"github.com/lukasdietrich/briefmail/model"
 )
 
 func CheckSPF() FromHook {
+
 	return func(submission bool, ip net.IP, from *model.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil
 		}
 
+		log := logrus.WithFields(logrus.Fields{
+			"prefix": "spf",
+			"ip":     ip,
+			"from":   from,
+		})
+
 		result, _, err := spf.CheckHost(ip, from.Domain, from.String())
+		if err != nil {
+			log.Debugf("error=%v", err)
+		} else {
+			log.Debugf("result=%s", result)
+		}
 
 		switch result {
 		case spf.Temperror, spf.Permerror:
