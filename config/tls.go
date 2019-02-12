@@ -17,26 +17,68 @@ package config
 
 import (
 	"crypto/tls"
+	"os"
+	"sync"
+	"time"
 )
+
+type certFunc func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 
 type TLS struct {
 	Pem string
 	Key string
 }
 
-func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
-	if t.Pem == "" || t.Key == "" {
-		return nil, nil
+func (t *TLS) MakeTLSConfig() *tls.Config {
+	var f certFunc
+
+	switch true {
+	case t.Pem != "" && t.Key != "":
+		f = certByFile(t.Pem, t.Key)
+
+	default:
+		return nil
 	}
 
-	cert, err := tls.LoadX509KeyPair(t.Pem, t.Key)
-	if err != nil {
-		return nil, err
-	}
+	return &tls.Config{GetCertificate: f}
+}
 
-	config := tls.Config{
-		Certificates: []tls.Certificate{cert},
-	}
+func certByFile(pem, key string) certFunc {
+	var (
+		files    = []string{pem, key}
+		mutex    sync.Mutex
+		lastCert *tls.Certificate
+		lastTime time.Time
+	)
 
-	return &config, nil
+	return func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		if lastCert != nil {
+			for _, file := range files {
+				info, err := os.Stat(file)
+				if err != nil {
+					return nil, err
+				}
+
+				if info.ModTime().After(lastTime) {
+					goto load
+				}
+			}
+
+			return lastCert, nil
+		}
+
+	load:
+		cert, err := tls.LoadX509KeyPair(pem, key)
+		if err != nil {
+			return nil, err
+		}
+
+		lastCert = &cert
+		lastTime = time.Now()
+
+		return lastCert, nil
+	}
 }

@@ -73,10 +73,7 @@ func start() cli.Command {
 				Queue: &queue,
 			}
 
-			tlsConfig, err := config.TLS.MakeTLSConfig()
-			if err != nil {
-				return err
-			}
+			tlsConfig := config.TLS.MakeTLSConfig()
 
 			fromHooks, dataHooks, err := config.Hook.MakeInstances()
 			if err != nil {
