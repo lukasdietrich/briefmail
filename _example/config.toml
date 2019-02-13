@@ -22,9 +22,15 @@
   servers    = [ "zen.spamhaus.org" ]
 
 [tls]
-  # Paths to the `*.pem` and `*.key` files of a tls certificate
-  pem        = "cert/briefmail.pem"
+  # Use standard pem encoded files to load the certificate
+  source     = "files"
+  crt        = "cert/briefmail.crt"
   key        = "cert/briefmail.key"
+
+  # Extract a certificate from <https://traefik.io/>
+  # source     = "traefik"
+  # acme       = "/etc/traefik/acme.json"
+  # domain     = "localhost"
 
 [[smtp]]
   address    = ":25"
