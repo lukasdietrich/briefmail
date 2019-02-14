@@ -27,6 +27,10 @@ import (
 )
 
 var (
+	Version string
+)
+
+var (
 	DB    *storage.DB
 	Blobs *storage.Blobs
 	Cache *storage.Cache
@@ -43,6 +47,8 @@ func main() {
 
 	app.Name = "briefmail"
 	app.Usage = "Briefly set up email"
+
+	app.Version = Version
 
 	app.Commands = []cli.Command{
 		start(),
