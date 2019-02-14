@@ -62,8 +62,8 @@ type conn struct {
 	Writer
 }
 
-func wrapConn(netConn net.Conn) *conn {
-	varConn := variableNetConn{Conn: netConn}
+func WrapConn(raw net.Conn) Conn {
+	varConn := variableNetConn{Conn: raw}
 
 	return &conn{
 		raw: &varConn,
@@ -103,10 +103,13 @@ func (c *conn) IsTLS() bool {
 }
 
 func (c *conn) RemoteAddr() string {
-	var (
-		remote = c.raw.RemoteAddr().String()
-		i      = strings.Index(remote, ":")
-	)
+	remote := c.raw.RemoteAddr().String()
 
-	return remote[:i]
+	if remote == "pipe" {
+		// treat net/Pipe clients as localhost
+		// for testing purposes
+		return "127.0.0.1"
+	}
+
+	return remote[:strings.Index(remote, ":")]
 }
