@@ -15,12 +15,15 @@
 
 package normalize
 
-import "strings"
+import (
+	"golang.org/x/net/idna"
+	"golang.org/x/text/secure/precis"
+)
 
 func Domain(s string) (string, error) {
-	return strings.ToLower(s), nil
+	return idna.Lookup.ToUnicode(s)
 }
 
 func User(s string) (string, error) {
-	return strings.ToLower(s), nil
+	return precis.UsernameCaseMapped.CompareKey(s)
 }

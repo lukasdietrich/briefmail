@@ -16,8 +16,9 @@ require (
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/zaccone/spf v0.0.0-20170817004109-76747b8658d9
 	golang.org/x/crypto v0.0.0-20190123085648-057139ce5d2b
-	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e // indirect
+	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
 	golang.org/x/sys v0.0.0-20190203050204-7ae0202eb74c // indirect
+	golang.org/x/text v0.3.0
 	gopkg.in/AlecAivazis/survey.v1 v1.8.2
 )
