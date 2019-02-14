@@ -29,6 +29,12 @@ type Blobs struct {
 	fs afero.Fs
 }
 
+func NewInMemoryBlobs() (*Blobs, error) {
+	return &Blobs{
+		fs: afero.NewMemMapFs(),
+	}, nil
+}
+
 func NewBlobs(folderName string) (*Blobs, error) {
 	if err := os.MkdirAll(folderName, 0700); err != nil {
 		return nil, err

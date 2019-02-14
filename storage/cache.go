@@ -29,6 +29,12 @@ type Cache struct {
 	memoryLimit int64
 }
 
+func NewMemoryCache() (*Cache, error) {
+	return &Cache{
+		fs: afero.NewMemMapFs(),
+	}, nil
+}
+
 func NewCache(folderName string, memoryLimit int64) (*Cache, error) {
 	if err := os.MkdirAll(folderName, 0700); err != nil {
 		return nil, err

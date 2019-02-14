@@ -31,6 +31,10 @@ type DB struct {
 	conn *sql.DB
 }
 
+func NewMemoryDB() (*DB, error) {
+	return NewDB("file::memory:?mode=memory&cache=shared")
+}
+
 func NewDB(fileName string) (*DB, error) {
 	db, err := sql.Open("sqlite3", fileName)
 	if err != nil {
