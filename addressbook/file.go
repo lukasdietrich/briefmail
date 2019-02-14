@@ -22,6 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/normalize"
 	"github.com/lukasdietrich/briefmail/storage"
 )
 
@@ -32,17 +33,18 @@ type fileFormat struct {
 	Mailboxes map[string][]string
 }
 
-func Parse(fileName string, db *storage.DB) (*Book, error) {
+func Parse(fileName string, domains *normalize.Set, db *storage.DB) (Addressbook, error) {
 	var (
-		data fileFormat
-		book Book
+		data        fileFormat
+		addressbook addressbook
 	)
 
 	if _, err := toml.DecodeFile(fileName, &data); err != nil {
 		return nil, err
 	}
 
-	book.entries = make(map[string]map[string]*Entry)
+	addressbook.entries = make(map[string]map[string]*Entry)
+	addressbook.domains = domains
 
 	for name, addresses := range data.Mailboxes {
 		mailbox, err := db.Mailbox(name)
@@ -56,11 +58,11 @@ func Parse(fileName string, db *storage.DB) (*Book, error) {
 				return nil, err
 			}
 
-			if _, ok := book.entries[addr.Domain]; !ok {
-				book.entries[addr.Domain] = make(map[string]*Entry)
+			if _, ok := addressbook.entries[addr.Domain]; !ok {
+				addressbook.entries[addr.Domain] = make(map[string]*Entry)
 			}
 
-			book.entries[addr.Domain][addr.User] = &Entry{
+			addressbook.entries[addr.Domain][addr.User] = &Entry{
 				Kind:    Local,
 				Mailbox: &mailbox,
 			}
@@ -68,7 +70,7 @@ func Parse(fileName string, db *storage.DB) (*Book, error) {
 	}
 
 	logrus.Debug("addressbook:")
-	for domain, entries := range book.entries {
+	for domain, entries := range addressbook.entries {
 		logrus.Debugf("- domain: \"%s\"", domain)
 
 		for user, entry := range entries {
@@ -76,5 +78,5 @@ func Parse(fileName string, db *storage.DB) (*Book, error) {
 		}
 	}
 
-	return &book, nil
+	return &addressbook, nil
 }

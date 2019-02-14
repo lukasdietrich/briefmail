@@ -35,13 +35,13 @@ var log = logrus.WithField("prefix", "smtp")
 
 // Config contains options for the SMTP protocol
 type Config struct {
-	Hostname string
-	MaxSize  int64
-	Mailman  *delivery.Mailman
-	Book     *addressbook.Book
-	Cache    *storage.Cache
-	DB       *storage.DB
-	TLS      *tls.Config
+	Hostname    string
+	MaxSize     int64
+	Mailman     delivery.Mailman
+	Addressbook addressbook.Addressbook
+	Cache       *storage.Cache
+	DB          *storage.DB
+	TLS         *tls.Config
 
 	FromHooks []hook.FromHook
 	DataHooks []hook.DataHook
@@ -62,8 +62,8 @@ func New(config *Config) textproto.Protocol {
 				fmt.Sprintf("AUTH %s %s", "PLAIN", "LOGIN"),
 			),
 
-			"MAIL": mail(config.Book, config.MaxSize, config.FromHooks),
-			"RCPT": rcpt(config.Mailman, config.Book),
+			"MAIL": mail(config.Addressbook, config.MaxSize, config.FromHooks),
+			"RCPT": rcpt(config.Mailman, config.Addressbook),
 			"DATA": data(config.Mailman, config.Cache, config.MaxSize,
 				config.DataHooks),
 

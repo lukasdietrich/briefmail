@@ -140,7 +140,7 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(book *addressbook.Book, maxSize int64, hooks []hook.FromHook) handler {
+func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
 	var (
 		rOk   = reply{250, "noted."}
 		rSize = reply{552, "bit too much"}
@@ -227,7 +227,7 @@ func mail(book *addressbook.Book, maxSize int64, hooks []hook.FromHook) handler 
 // `RCPT` command as specified in RFC#5321 4.1.1.3
 //
 //     "RCPT TO:<" <Forward-path> ">" [ SP Parameters ] CRLF
-func rcpt(mailman *delivery.Mailman, book *addressbook.Book) handler {
+func rcpt(mailman delivery.Mailman, book addressbook.Addressbook) handler {
 	var (
 		rOk                = reply{250, "yup, another?"}
 		rTooManyRecipients = reply{452, "that is quite a crowd already!"}
@@ -275,12 +275,7 @@ func rcpt(mailman *delivery.Mailman, book *addressbook.Book) handler {
 // `DATA` command as specified in RFC#5321 4.1.1.4
 //
 //     "DATA" CRLF
-func data(
-	mailman *delivery.Mailman,
-	cache *storage.Cache,
-	maxSize int64,
-	hooks []hook.DataHook,
-) handler {
+func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
 	var (
 		rData = reply{354, "go ahead. period."}
 		rOk   = reply{250, "confirmed transfer."}

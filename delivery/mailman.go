@@ -23,14 +23,28 @@ import (
 	"github.com/lukasdietrich/briefmail/storage"
 )
 
-type Mailman struct {
-	DB    *storage.DB
-	Blobs *storage.Blobs
-	Book  *addressbook.Book
-	Queue *QueueWorker
+type MailmanConfig struct {
+	DB          *storage.DB
+	Blobs       *storage.Blobs
+	Addressbook addressbook.Addressbook
+	Queue       *QueueWorker
 }
 
-func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
+type Mailman interface {
+	Deliver(*model.Envelope, model.Body) error
+}
+
+type mailman struct {
+	*MailmanConfig
+}
+
+func NewMailman(config *MailmanConfig) Mailman {
+	return &mailman{
+		MailmanConfig: config,
+	}
+}
+
+func (m *mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 	offset := mail.Prepend("Return-Path", fmt.Sprintf("<%s>", envelope.From))
 	id, size, err := m.Blobs.Write(mail)
 	if err != nil {
@@ -48,7 +62,7 @@ func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 	)
 
 	for _, addr := range envelope.To {
-		entry := m.Book.Lookup(addr)
+		entry := m.Addressbook.Lookup(addr)
 		if entry == nil {
 			return fmt.Errorf("could not deliver to %s", addr)
 		}

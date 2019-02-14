@@ -35,7 +35,7 @@ func TestSimple(t *testing.T) {
 	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
 	assert.Nil(t, err)
 
-	book := Book{
+	addressbook := addressbook{
 		domains: domains,
 		entries: map[string]map[string]*Entry{
 			"host1": {
@@ -61,7 +61,7 @@ func TestSimple(t *testing.T) {
 		},
 	} {
 		t.Run(addr, func(t *testing.T) {
-			actual := book.Lookup(mustAddress(addr))
+			actual := addressbook.Lookup(mustAddress(addr))
 			assert.Equal(t, entry, actual)
 		})
 	}
@@ -78,7 +78,7 @@ func TestWildcard(t *testing.T) {
 	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
 	assert.Nil(t, err)
 
-	book := Book{
+	addressbook := addressbook{
 		domains: domains,
 		entries: map[string]map[string]*Entry{
 			"host1": {
@@ -99,7 +99,7 @@ func TestWildcard(t *testing.T) {
 		"user2@host2": anyAtAny,
 	} {
 		t.Run(addr, func(t *testing.T) {
-			actual := book.Lookup(mustAddress(addr))
+			actual := addressbook.Lookup(mustAddress(addr))
 			assert.Equal(t, entry, actual)
 		})
 	}

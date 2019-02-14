@@ -54,24 +54,22 @@ func start() cli.Command {
 				return err
 			}
 
-			book, err := addressbook.Parse(ctx.String("addressbook"), DB)
+			book, err := addressbook.Parse(ctx.String("addressbook"), domains, DB)
 			if err != nil {
 				return err
 			}
-
-			book.SetLocalDomains(domains)
 
 			queue := delivery.QueueWorker{
 				DB:    DB,
 				Blobs: Blobs,
 			}
 
-			mailman := delivery.Mailman{
-				DB:    DB,
-				Blobs: Blobs,
-				Book:  book,
-				Queue: &queue,
-			}
+			mailman := delivery.NewMailman(&delivery.MailmanConfig{
+				DB:          DB,
+				Blobs:       Blobs,
+				Addressbook: book,
+				Queue:       &queue,
+			})
 
 			tlsConfig, err := config.TLS.MakeTLSConfig()
 			if err != nil {
@@ -85,15 +83,15 @@ func start() cli.Command {
 
 			for _, instance := range config.Smtp {
 				go startServer(smtp.New(&smtp.Config{
-					Hostname:  config.General.Hostname,
-					MaxSize:   config.Mail.Size,
-					Mailman:   &mailman,
-					Book:      book,
-					Cache:     Cache,
-					DB:        DB,
-					TLS:       tlsConfig,
-					FromHooks: fromHooks,
-					DataHooks: dataHooks,
+					Hostname:    config.General.Hostname,
+					MaxSize:     config.Mail.Size,
+					Mailman:     mailman,
+					Addressbook: book,
+					Cache:       Cache,
+					DB:          DB,
+					TLS:         tlsConfig,
+					FromHooks:   fromHooks,
+					DataHooks:   dataHooks,
 				}), instance.Address, tlsConfig, instance.TLS)
 
 				logrus.Infof("start smtp @ %s (tls: %v)",

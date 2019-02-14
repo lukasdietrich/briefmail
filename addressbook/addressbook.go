@@ -50,16 +50,16 @@ func (e *Entry) String() string {
 	return ""
 }
 
-type Book struct {
+type Addressbook interface {
+	Lookup(*model.Address) *Entry
+}
+
+type addressbook struct {
 	domains *normalize.Set
 	entries map[string]map[string]*Entry
 }
 
-func (b *Book) SetLocalDomains(domains *normalize.Set) {
-	b.domains = domains
-}
-
-func (b *Book) Lookup(addr *model.Address) *Entry {
+func (b *addressbook) Lookup(addr *model.Address) *Entry {
 	if !b.domains.Contains(addr.Domain) {
 		return &Entry{
 			Kind:    Remote,
