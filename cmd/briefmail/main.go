@@ -58,8 +58,9 @@ func main() {
 	app.Before = before
 	app.Flags = []cli.Flag{
 		cli.BoolFlag{
-			Name:  "verbose",
-			Usage: "enable verbose logging",
+			Name:   "verbose",
+			Usage:  "enable verbose logging",
+			EnvVar: "BRIEFMAIL_VERBOSE",
 		},
 		cli.StringFlag{
 			Name:   "data",

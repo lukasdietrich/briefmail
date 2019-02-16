@@ -94,8 +94,10 @@ func start() cli.Command {
 					DataHooks:   dataHooks,
 				}), instance.Address, tlsConfig, instance.TLS)
 
-				logrus.Infof("start smtp @ %s (tls: %v)",
-					instance.Address, instance.TLS)
+				logrus.WithFields(logrus.Fields{
+					"address": instance.Address,
+					"tls":     instance.TLS,
+				}).Info("start smtp")
 			}
 
 			for _, instance := range config.Pop3 {
@@ -106,8 +108,10 @@ func start() cli.Command {
 					TLS:      tlsConfig,
 				}), instance.Address, tlsConfig, instance.TLS)
 
-				logrus.Infof("start pop3 @ %s (tls: %v)",
-					instance.Address, instance.TLS)
+				logrus.WithFields(logrus.Fields{
+					"address": instance.Address,
+					"tls":     instance.TLS,
+				}).Infof("start pop3")
 			}
 
 			queue.WakeUp()
