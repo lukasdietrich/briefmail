@@ -368,7 +368,8 @@ func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks [
 			return err
 		}
 
-		log.Debugf("received a mail from %s", s.envelope.From)
+		log.WithField("from", s.envelope.From).
+			Debug("mail successfully received")
 
 		s.state = sHelo
 		return s.send(&rOk)

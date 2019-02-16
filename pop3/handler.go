@@ -112,14 +112,16 @@ func pass(l *locks, db *storage.DB) handler {
 //
 //     "QUIT" CRLF
 func quit(db *storage.DB, blobs *storage.Blobs) handler {
+	cleaner := storage.NewCleaner(db, blobs)
+
 	return func(s *session, _ *command) error {
 		if s.state.in(sTransaction) {
 			log.WithFields(logrus.Fields{
 				"mailbox": s.mailbox.id,
 				"tls":     s.Conn.IsTLS(),
-			}).Debugf("end of transaction (delete %d of %d)",
-				len(s.mailbox.marks),
-				len(s.mailbox.entries))
+				"deleted": len(s.mailbox.marks),
+				"total":   len(s.mailbox.entries),
+			}).Debug("end of transaction")
 
 			mails := make([]model.ID, 0, len(s.mailbox.marks))
 
@@ -131,13 +133,8 @@ func quit(db *storage.DB, blobs *storage.Blobs) handler {
 				return err
 			}
 
-			orphans, err := db.DeleteOrphans()
-			if err != nil {
-				return err
-			}
-
-			for _, orphan := range orphans {
-				blobs.Delete(orphan)
+			if err := cleaner.Clean(); err != nil {
+				log.Warn(err)
 			}
 		}
 

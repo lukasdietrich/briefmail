@@ -45,7 +45,7 @@ func CheckDNSBL(server string) FromHook {
 		records, err := dns.QueryA(strings.Join(reversed[:], "."))
 
 		if err != nil {
-			log.Debugf("error=%v", err)
+			log.Warn(err)
 			return nil, err
 		}
 

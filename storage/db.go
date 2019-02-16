@@ -241,18 +241,6 @@ func (d *DB) AddMail(id model.ID, size, offset int64, envelope *model.Envelope) 
 	})
 }
 
-func (d *DB) DeleteMail(id model.ID) error {
-	return d.do(func(tx *sql.Tx) error {
-		_, err := tx.Exec(
-			`
-			delete from "mails"
-			where "uuid" = ? ;
-			`, id)
-
-		return err
-	})
-}
-
 type Entry struct {
 	MailID model.ID
 	Size   int64

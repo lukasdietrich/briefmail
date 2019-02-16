@@ -85,12 +85,14 @@ func (q *QueueWorker) next() (*storage.QueueElement, time.Duration, error) {
 }
 
 func (q *QueueWorker) work() {
+	cleaner := storage.NewCleaner(q.DB, q.Blobs)
+
 	for {
 		q.lock.Lock()
 
 		elem, sleep, err := q.next()
 		if err != nil {
-			logrus.Error(err)
+			log.Error(err)
 			time.Sleep(time.Minute * 5)
 
 			continue
@@ -111,11 +113,12 @@ func (q *QueueWorker) work() {
 		}
 
 		q.do(elem)
+		cleaner.Clean()
 	}
 }
 
 func (q *QueueWorker) do(elem *storage.QueueElement) {
-	log := logrus.WithFields(logrus.Fields{
+	log := log.WithFields(logrus.Fields{
 		"mail":    elem.MailID,
 		"attempt": elem.Attempts,
 	})
@@ -178,7 +181,8 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 	}
 
 	if len(undeliverable) > 0 {
-		log.Warnf("could not deliver to %v", undeliverable)
+		log.WithField("to", undeliverable).
+			Warn("could not deliver to some recipients")
 	}
 
 	if len(pending) == 0 && len(undeliverable) == 0 {

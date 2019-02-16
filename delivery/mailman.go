@@ -76,16 +76,23 @@ func (m *mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 		}
 	}
 
+	log := log.WithField("mail", id)
+
 	if len(mailboxes) > 0 {
 		if err := m.DB.AddEntries(id, mailboxes); err != nil {
 			return err
 		}
+
+		log.WithField("mailboxes", mailboxes).
+			Debug("mail delivered to local mailboxes")
 	}
 
 	if len(queue) > 0 {
 		if err := m.DB.AddToQueue(id, queue); err != nil {
 			return err
 		}
+
+		log.Debug("mail queued for outbound delivery")
 
 		m.Queue.WakeUp()
 	}

@@ -40,9 +40,9 @@ func CheckSPF() FromHook {
 
 		result, _, err := spf.CheckHost(ip, from.Domain, from.String())
 		if err != nil {
-			log.Debugf("error=%v", err)
+			log.Debug(err)
 		} else {
-			log.Debugf("result=%s", result)
+			log.Debug(result)
 		}
 
 		switch result {
