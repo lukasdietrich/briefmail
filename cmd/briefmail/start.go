@@ -35,12 +35,14 @@ func start() cli.Command {
 		Usage: "Start smtp and pop3 servers",
 		Flags: []cli.Flag{
 			cli.StringFlag{
-				Name:  "config",
-				Value: "config.toml",
+				Name:   "config",
+				EnvVar: "BRIEFMAIL_CONFIG",
+				Value:  "config.toml",
 			},
 			cli.StringFlag{
-				Name:  "addressbook",
-				Value: "addressbook.toml",
+				Name:   "addressbook",
+				EnvVar: "BRIEFMAIL_ADDRESSBOOK",
+				Value:  "addressbook.toml",
 			},
 		},
 		Action: func(ctx *cli.Context) error {
