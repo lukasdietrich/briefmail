@@ -26,7 +26,6 @@ import (
 )
 
 func CheckSPF() FromHook {
-
 	return func(submission bool, ip net.IP, from *model.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil
@@ -45,29 +44,24 @@ func CheckSPF() FromHook {
 			log.Debug(result)
 		}
 
-		switch result {
-		case spf.Temperror, spf.Permerror:
-			return nil, err
-
-		case spf.Fail:
+		if result == spf.Fail {
 			return &Result{
 				Reject: true,
 				Code:   550,
 				Text:   "you shall not pass",
 			}, nil
-
-		default:
-			return &Result{
-				Reject: false,
-				Headers: []HeaderField{
-					{
-						Key: "Received-SPF",
-						Value: fmt.Sprintf(
-							"%s (with domain=%s of sender=%s) client-ip=%s;",
-							result, from.Domain, from.String(), ip),
-					},
-				},
-			}, nil
 		}
+
+		return &Result{
+			Reject: false,
+			Headers: []HeaderField{
+				{
+					Key: "Received-SPF",
+					Value: fmt.Sprintf(
+						"%s (with domain=%s of sender=%s) client-ip=%s;",
+						result, from.Domain, from.String(), ip),
+				},
+			},
+		}, nil
 	}
 }
