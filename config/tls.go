@@ -57,12 +57,16 @@ func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
 
 	switch strings.ToLower(t.Source) {
 	case "files":
+		log.Debugf("using certifcates from files: %s and %s", t.Crt, t.Key)
 		source = &filesCertSource{
 			crtFile: t.Crt,
 			keyFile: t.Key,
 		}
 
 	case "traefik":
+		log.Debugf("using certificates from traefik: %s for domain %s",
+			t.Acme, t.Domain)
+
 		source = &traefikCertSource{
 			acmeFile: t.Acme,
 			domain:   t.Domain,
@@ -80,12 +84,16 @@ func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
 			lock.Lock()
 			defer lock.Unlock()
 
+			log.Debug("checking for certificate updates")
+
 			newTime, err := source.time()
 			if err != nil {
 				return nil, err
 			}
 
 			if newTime.After(lastTime) {
+				log.Debug("certificate source is updated")
+
 				newCert, err := source.load()
 				if err != nil {
 					return nil, err
@@ -94,7 +102,7 @@ func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
 				lastTime = newTime
 				lastCert = newCert
 
-				log.Debug("reloaded certificate")
+				log.Debug("reloaded certificate %s", lastTime)
 			}
 
 			return lastCert, nil
