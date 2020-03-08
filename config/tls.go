@@ -102,7 +102,7 @@ func (t *TLS) MakeTLSConfig() (*tls.Config, error) {
 				lastTime = newTime
 				lastCert = newCert
 
-				log.Debug("reloaded certificate %s", lastTime)
+				log.Debugf("reloaded certificate %s", lastTime)
 			}
 
 			return lastCert, nil
@@ -156,15 +156,20 @@ func (s *traefikCertSource) time() (time.Time, error) {
 }
 
 func (s *traefikCertSource) load() (*tls.Certificate, error) {
-	var data struct {
-		Entries []struct {
-			Domain struct {
-				Main string `json:"main"`
-			} `json:"domain"`
+	type Entries []struct {
+		Domain struct {
+			Main string `json:"main"`
+		} `json:"domain"`
 
-			Crt string `json:"certificate"`
-			Key string `json:"key"`
-		} `json:"certificates"`
+		Crt string `json:"certificate"`
+		Key string `json:"key"`
+	}
+
+	var data struct {
+		Entries     Entries `json:"certificates"` // Traefik v1
+		Letsencrypt struct {
+			Entries Entries `json:"certificates"` // Traefik v2
+		} `json:"letsencrypt"`
 	}
 
 	f, err := os.Open(s.acmeFile)
@@ -178,7 +183,7 @@ func (s *traefikCertSource) load() (*tls.Certificate, error) {
 		return nil, err
 	}
 
-	for _, entry := range data.Entries {
+	for _, entry := range append(data.Entries, data.Letsencrypt.Entries...) {
 		if entry.Domain.Main == s.domain {
 			crtPem, err := base64.StdEncoding.DecodeString(entry.Crt)
 			if err != nil {
