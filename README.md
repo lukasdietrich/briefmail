@@ -1,6 +1,6 @@
 # Briefmail
 
-[![Build Status](https://dev.azure.com/lukasdietrich/briefmail/_apis/build/status/lukasdietrich.briefmail?branchName=master)](https://dev.azure.com/lukasdietrich/briefmail/_build/latest?definitionId=1&branchName=master) [![Build Status](https://travis-ci.org/lukasdietrich/briefmail.svg?branch=master)](https://travis-ci.org/lukasdietrich/briefmail) [![Go Report Card](https://goreportcard.com/badge/github.com/lukasdietrich/briefmail)](https://goreportcard.com/report/github.com/lukasdietrich/briefmail) [![Docker Pulls](https://img.shields.io/docker/pulls/lukd/briefmail.svg)](https://hub.docker.com/r/lukd/briefmail)
+![Build](https://github.com/lukasdietrich/briefmail/workflows/Build/badge.svg) [![Go Report Card](https://goreportcard.com/badge/github.com/lukasdietrich/briefmail)](https://goreportcard.com/report/github.com/lukasdietrich/briefmail) [![Docker Pulls](https://img.shields.io/docker/pulls/lukd/briefmail.svg)](https://hub.docker.com/r/lukd/briefmail)
 
 Briefmail aims to be an easy to set up and self contained mail server for both
 sending and receiving emails.
