@@ -1,5 +1,7 @@
 module github.com/lukasdietrich/briefmail
 
+go 1.13
+
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/google/uuid v1.1.0
@@ -15,10 +17,9 @@ require (
 	github.com/urfave/cli v1.20.0
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/zaccone/spf v0.0.0-20170817004109-76747b8658d9
-	golang.org/x/crypto v0.0.0-20190123085648-057139ce5d2b
-	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e
-	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
-	golang.org/x/sys v0.0.0-20190203050204-7ae0202eb74c // indirect
+	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
+	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
+	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/text v0.3.0
 	gopkg.in/AlecAivazis/survey.v1 v1.8.2
 )
