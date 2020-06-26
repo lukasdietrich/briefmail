@@ -1,4 +1,4 @@
-// Copyright (C) 2019  Lukas Dietrich <lukas@lukasdietrich.com>
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,11 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package config
+package certs
 
-type Pop3 []Pop3Instance
+import (
+	"github.com/google/wire"
+)
 
-type Pop3Instance struct {
-	Address string
-	TLS     bool
-}
+var WireSet = wire.NewSet(
+	NewCertSource,
+	NewTlsConfig,
+)

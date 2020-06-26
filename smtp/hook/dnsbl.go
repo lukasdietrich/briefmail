@@ -20,12 +20,16 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/dns"
 	"github.com/lukasdietrich/briefmail/model"
 )
 
-func CheckDNSBL(server string) FromHook {
+func makeDnsblHook() FromHook {
+	server := viper.GetString("hook.dnsbl.server")
+	logrus.Debugf("hook: registering dnsbl hook (server=%s)", server)
+
 	return func(submission bool, ip net.IP, _ *model.Address) (*Result, error) {
 		if submission || ip.To4() == nil {
 			return &Result{}, nil

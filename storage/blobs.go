@@ -21,9 +21,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/model"
 )
+
+func init() {
+	viper.SetDefault("storage.blobs.foldername", "data/blobs")
+}
 
 type Blobs struct {
 	fs afero.Fs
@@ -35,7 +40,9 @@ func NewInMemoryBlobs() (*Blobs, error) {
 	}, nil
 }
 
-func NewBlobs(folderName string) (*Blobs, error) {
+func NewBlobs() (*Blobs, error) {
+	folderName := viper.GetString("storage.blobs.foldername")
+
 	if err := os.MkdirAll(folderName, 0700); err != nil {
 		return nil, err
 	}

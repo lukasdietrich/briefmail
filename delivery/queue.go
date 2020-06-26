@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/dns"
 	"github.com/lukasdietrich/briefmail/model"
@@ -39,13 +40,12 @@ var (
 )
 
 type QueueWorker struct {
-	DB       *storage.DB
-	Blobs    *storage.Blobs
-	Hostname string
+	DB    *storage.DB
+	Blobs *storage.Blobs
 
-	lock  sync.Mutex
-	alarm *time.Timer
-	busy  bool
+	lock  sync.Mutex  `wire:"-"`
+	alarm *time.Timer `wire:"-"`
+	busy  bool        `wire:"-"`
 }
 
 func (q *QueueWorker) WakeUp() {
@@ -153,7 +153,8 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 			continue
 		}
 
-		err = c.send(r, q.Hostname, mail.From, addresses)
+		hostname := viper.GetString("general.hostname")
+		err = c.send(r, hostname, mail.From, addresses)
 		r.Close()
 
 		if err != nil {

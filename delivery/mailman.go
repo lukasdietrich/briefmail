@@ -23,28 +23,14 @@ import (
 	"github.com/lukasdietrich/briefmail/storage"
 )
 
-type MailmanConfig struct {
+type Mailman struct {
 	DB          *storage.DB
 	Blobs       *storage.Blobs
 	Addressbook addressbook.Addressbook
 	Queue       *QueueWorker
 }
 
-type Mailman interface {
-	Deliver(*model.Envelope, model.Body) error
-}
-
-type mailman struct {
-	*MailmanConfig
-}
-
-func NewMailman(config *MailmanConfig) Mailman {
-	return &mailman{
-		MailmanConfig: config,
-	}
-}
-
-func (m *mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
+func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
 	offset := mail.Prepend("Return-Path", fmt.Sprintf("<%s>", envelope.From))
 	id, size, err := m.Blobs.Write(mail)
 	if err != nil {

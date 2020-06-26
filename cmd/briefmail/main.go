@@ -16,92 +16,126 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
-	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
-	prefixed "github.com/x-cray/logrus-prefixed-formatter"
-
-	"github.com/lukasdietrich/briefmail/storage"
+	"github.com/spf13/viper"
 )
 
+const usageText = `
+Usage:
+  briefmail [OPTIONS] COMMAND
+
+  Briefly set up email.
+
+Version:
+  %s
+
+Commands:
+  start     Start the briefmail server
+  shell     Start an interactive administration shell
+
+Options:
+`
+
 var (
+	// Version is set at compile-time.
 	Version string
 )
 
-var (
-	DB    *storage.DB
-	Blobs *storage.Blobs
-	Cache *storage.Cache
-)
-
 func init() {
-	logrus.SetFormatter(&prefixed.TextFormatter{
-		FullTimestamp: true,
+	viper.SetDefault("log.level", "debug")
+
+	logrus.SetReportCaller(true)
+	logrus.SetFormatter(&logrus.TextFormatter{
+		FullTimestamp:    true,
+		QuoteEmptyFields: true,
+		CallerPrettyfier: func(frame *runtime.Frame) (string, string) {
+			return frame.Func.Name(), ""
+		},
 	})
 }
 
 func main() {
-	app := cli.NewApp()
+	var (
+		configFilename string
+	)
 
-	app.Name = "briefmail"
-	app.Usage = "Briefly set up email"
+	flag.StringVar(&configFilename,
+		"config",
+		"config.toml",
+		"Path to configuration file")
+	flag.Usage = printUsage
+	flag.Parse()
 
-	app.Version = Version
-
-	app.Commands = []cli.Command{
-		start(),
-		mailbox(),
-	}
-
-	app.Before = before
-	app.Flags = []cli.Flag{
-		cli.BoolFlag{
-			Name:   "verbose",
-			Usage:  "enable verbose logging",
-			EnvVar: "BRIEFMAIL_VERBOSE",
-		},
-		cli.StringFlag{
-			Name:   "data",
-			Usage:  "path to the data folder",
-			EnvVar: "BRIEFMAIL_DATA",
-			Value:  "./data/",
-		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		logrus.Fatal(err)
+	switch commandName := flag.Arg(0); commandName {
+	case "start", "shell":
+		setupConfig(configFilename)
+		setupLogger()
+		runCommand(commandName)
+	default:
+		flag.Usage()
 	}
 }
 
-func before(ctx *cli.Context) error {
-	if ctx.Bool("verbose") {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
+type command interface {
+	run() error
+}
 
-	err := os.MkdirAll(ctx.String("data"), 0700)
-	if err != nil {
-		return err
-	}
-
-	DB, err = storage.NewDB(filepath.Join(ctx.String("data"), "db.sqlite"))
-	if err != nil {
-		return err
-	}
-
-	Blobs, err = storage.NewBlobs(filepath.Join(ctx.String("data"), "blobs"))
-	if err != nil {
-		return err
-	}
-
-	Cache, err = storage.NewCache(
-		filepath.Join(ctx.String("data"), "temp"),
-		1048576, // 1 MiB
+func runCommand(commandName string) {
+	var (
+		cmd command
+		err error
 	)
-	if err != nil {
-		return err
+
+	switch commandName {
+	case "start":
+		cmd, err = newStartCommand()
+	case "shell":
+		cmd, err = newShellCommand()
 	}
 
-	return nil
+	if err != nil {
+		logrus.Fatalf("could not initialize the application: %v", err)
+	}
+
+	if err := cmd.run(); err != nil {
+		logrus.Fatalf("%v", err)
+	}
+}
+
+func printUsage() {
+	fmt.Fprintf(flag.CommandLine.Output(), usageText, Version)
+	flag.PrintDefaults()
+}
+
+func setupLogger() {
+	logLevel, err := logrus.ParseLevel(viper.GetString("log.level"))
+	if err != nil {
+		logrus.Fatalf("unknown log level: %v", err)
+	}
+
+	logrus.SetLevel(logLevel)
+}
+
+func setupConfig(filename string) {
+	logrus.Infof("loading config file %s", filename)
+
+	viper.SetTypeByDefaultValue(true)
+	viper.SetEnvKeyReplacer(strings.NewReplacer("_", "."))
+	viper.SetEnvPrefix("BRIEFMAIL")
+	viper.AutomaticEnv()
+	viper.SetConfigFile(filename)
+
+	if err := viper.ReadInConfig(); err != nil {
+		if os.IsNotExist(err) {
+			logrus.Warnf("configuration file missing: %v", err)
+		} else {
+			logrus.Fatalf("could not load configuration: %v", err)
+		}
+	}
 }

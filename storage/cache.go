@@ -22,7 +22,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 )
+
+func init() {
+	viper.SetDefault("storage.cache.foldername", "data/temp")
+	viper.SetDefault("storage.cache.memoryLimit", 1048576)
+}
 
 type Cache struct {
 	fs          afero.Fs
@@ -35,7 +41,12 @@ func NewMemoryCache() (*Cache, error) {
 	}, nil
 }
 
-func NewCache(folderName string, memoryLimit int64) (*Cache, error) {
+func NewCache() (*Cache, error) {
+	var (
+		folderName  = viper.GetString("storage.cache.foldername")
+		memoryLimit = viper.GetInt64("storage.cache.memoryLimit")
+	)
+
 	if err := os.MkdirAll(folderName, 0700); err != nil {
 		return nil, err
 	}

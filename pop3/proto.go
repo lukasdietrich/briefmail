@@ -29,45 +29,40 @@ import (
 
 var log = logrus.WithField("prefix", "pop3")
 
-type Config struct {
-	Hostname string
-	DB       *storage.DB
-	Blobs    *storage.Blobs
-	TLS      *tls.Config
-}
-
-type proto struct {
-	config     *Config
+type Proto struct {
 	locks      *locks
 	handlerMap map[string]handler
 }
 
 // New creates a new Protocol instance to be used with a textproto Server
-func New(config *Config) textproto.Protocol {
+func New(
+	db *storage.DB,
+	blobs *storage.Blobs,
+	tlsConfig *tls.Config,
+) *Proto {
 	locks := newLocks()
 
-	return &proto{
-		config: config,
-		locks:  locks,
+	return &Proto{
+		locks: locks,
 		handlerMap: map[string]handler{
 			"CAPA": capa(
 				"USER",
 				"UIDL"),
 
 			"USER": user(),
-			"PASS": pass(locks, config.DB),
+			"PASS": pass(locks, db),
 
 			"STAT": stat(),
 			"LIST": list(),
 			"UIDL": uidl(),
-			"RETR": retr(config.Blobs),
+			"RETR": retr(blobs),
 			"DELE": dele(),
 
 			"NOOP": noop(),
 			"RSET": rset(),
-			"QUIT": quit(config.DB, config.Blobs),
+			"QUIT": quit(db, blobs),
 
-			"STLS": stls(config.TLS),
+			"STLS": stls(tlsConfig),
 		},
 	}
 }
@@ -82,7 +77,7 @@ var (
 	rInvalidSyntax  = reply{false, "invalid syntax"}
 )
 
-func (p *proto) Handle(c textproto.Conn) {
+func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,
 		state: sInit,
@@ -110,7 +105,7 @@ func (p *proto) Handle(c textproto.Conn) {
 	}
 }
 
-func (p *proto) loop(s *session) error {
+func (p *Proto) loop(s *session) error {
 	var cmd command
 
 	for {

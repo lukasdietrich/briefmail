@@ -1,4 +1,4 @@
-// Copyright (C) 2019  Lukas Dietrich <lukas@lukasdietrich.com>
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,15 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package config
+package addressbook
 
-import "github.com/lukasdietrich/briefmail/normalize"
+import (
+	"github.com/google/wire"
+)
 
-type General struct {
-	Hostname string
-	Domains  []string
-}
-
-func (g *General) NormalizedDomains() (*normalize.Set, error) {
-	return normalize.NewSet(g.Domains, normalize.Domain)
-}
+var WireSet = wire.NewSet(
+	Parse,
+)

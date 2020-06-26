@@ -25,7 +25,9 @@ import (
 	"github.com/lukasdietrich/briefmail/model"
 )
 
-func CheckSPF() FromHook {
+func makeSpfHook() FromHook {
+	logrus.Debug("hook: registering spf hook")
+
 	return func(submission bool, ip net.IP, from *model.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil

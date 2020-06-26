@@ -20,6 +20,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/model"
 	"github.com/lukasdietrich/briefmail/normalize"
@@ -33,8 +34,18 @@ type fileFormat struct {
 	Mailboxes map[string][]string
 }
 
-func Parse(fileName string, domains *normalize.Set, db *storage.DB) (Addressbook, error) {
+func makeDomainSet() (*normalize.Set, error) {
+	return normalize.NewSet(viper.GetStringSlice("general.domains"), normalize.Domain)
+}
+
+func Parse(db *storage.DB) (Addressbook, error) {
+	domains, err := makeDomainSet()
+	if err != nil {
+		return nil, err
+	}
+
 	var (
+		fileName    = viper.GetString("addressbook.filename")
 		data        fileFormat
 		addressbook addressbook
 	)

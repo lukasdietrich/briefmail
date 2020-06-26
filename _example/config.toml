@@ -5,6 +5,9 @@
   # A list of domains this server is accepting mails for
   domains    = [ "localhost" ]
 
+[addressbook]
+  filename = "_example/addressbook.toml"
+
 [mail]
   # Limit the maximum accepted mail size to be 25 MB
   # see <https://tools.ietf.org/html/rfc1870>

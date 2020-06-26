@@ -23,20 +23,21 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/model"
 )
+
+func init() {
+	viper.SetDefault("storage.database.filename", "data/db.sqlite")
+}
 
 type DB struct {
 	conn *sql.DB
 }
 
-func NewMemoryDB() (*DB, error) {
-	return NewDB("file::memory:?mode=memory&cache=shared")
-}
-
-func NewDB(fileName string) (*DB, error) {
-	db, err := sql.Open("sqlite3", fileName)
+func NewDB() (*DB, error) {
+	db, err := sql.Open("sqlite3", viper.GetString("storage.database.filename"))
 	if err != nil {
 		return nil, err
 	}

@@ -22,6 +22,7 @@ import (
 	"io"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/addressbook"
 	"github.com/lukasdietrich/briefmail/delivery"
@@ -33,47 +34,45 @@ import (
 
 var log = logrus.WithField("prefix", "smtp")
 
-// Config contains options for the SMTP protocol
-type Config struct {
-	Hostname    string
-	MaxSize     int64
-	Mailman     delivery.Mailman
-	Addressbook addressbook.Addressbook
-	Cache       *storage.Cache
-	DB          *storage.DB
-	TLS         *tls.Config
-
-	FromHooks []hook.FromHook
-	DataHooks []hook.DataHook
-}
-
-type proto struct {
+type Proto struct {
 	handlerMap map[string]handler
 }
 
 // New creates a new Protocol instance to be used with a textproto Server
-func New(config *Config) textproto.Protocol {
-	return &proto{
+func New(
+	mailman delivery.Mailman,
+	addressbook addressbook.Addressbook,
+	cache *storage.Cache,
+	db *storage.DB,
+	tlsConfig *tls.Config,
+	fromHooks []hook.FromHook,
+	dataHooks []hook.DataHook,
+) *Proto {
+	var (
+		hostname = viper.GetString("general.hostname")
+		maxSize  = viper.GetInt64("mail.size")
+	)
+
+	return &Proto{
 		handlerMap: map[string]handler{
-			"HELO": helo(config.Hostname),
-			"EHLO": ehlo(config.Hostname,
-				fmt.Sprintf("SIZE %d", config.MaxSize),
+			"HELO": helo(hostname),
+			"EHLO": ehlo(hostname,
+				fmt.Sprintf("SIZE %d", maxSize),
 				fmt.Sprintf("STARTTLS"),
 				fmt.Sprintf("AUTH %s %s", "PLAIN", "LOGIN"),
 			),
 
-			"MAIL": mail(config.Addressbook, config.MaxSize, config.FromHooks),
-			"RCPT": rcpt(config.Mailman, config.Addressbook),
-			"DATA": data(config.Mailman, config.Cache, config.MaxSize,
-				config.DataHooks),
+			"MAIL": mail(addressbook, maxSize, fromHooks),
+			"RCPT": rcpt(mailman, addressbook),
+			"DATA": data(mailman, cache, maxSize, dataHooks),
 
 			"NOOP": noop(),
 			"RSET": rset(),
 			"VRFY": vrfy(),
 			"QUIT": quit(),
 
-			"STARTTLS": starttls(config.TLS),
-			"AUTH":     auth(config.DB),
+			"STARTTLS": starttls(tlsConfig),
+			"AUTH":     auth(db),
 		},
 	}
 }
@@ -89,7 +88,7 @@ var (
 	rInvalidAddress = reply{553, "invalid address format"}
 )
 
-func (p *proto) Handle(c textproto.Conn) {
+func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,
 		state: sInit,
@@ -111,7 +110,7 @@ func (p *proto) Handle(c textproto.Conn) {
 	}
 }
 
-func (p *proto) loop(s *session) error {
+func (p *Proto) loop(s *session) error {
 	var cmd command
 
 	for {

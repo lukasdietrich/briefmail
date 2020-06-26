@@ -1,4 +1,4 @@
-// Copyright (C) 2019  Lukas Dietrich <lukas@lukasdietrich.com>
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,11 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package config
+package delivery
 
-type Smtp []SmtpInstance
+import (
+	"github.com/google/wire"
+)
 
-type SmtpInstance struct {
-	Address string
-	TLS     bool
-}
+var WireSet = wire.NewSet(
+	wire.Struct(new(Mailman), "*"),
+	wire.Struct(new(QueueWorker), "*"),
+)

@@ -34,6 +34,7 @@ run: $(BINARY)
 
 $(BINARY): $(SOURCE)
 	mkdir -p $(TARGET)
+	wire ./...
 	go build \
 		-o $(BINARY) \
 		-ldflags '-X "main.Version=$(shell git log -1 --pretty=format:"%h (%ai)")"' \

@@ -1,4 +1,4 @@
-// Copyright (C) 2019  Lukas Dietrich <lukas@lukasdietrich.com>
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,34 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package config
+package hook
 
-import "github.com/lukasdietrich/briefmail/smtp/hook"
+import (
+	"github.com/google/wire"
+)
 
-type Hook struct {
-	SPF struct {
-		Enable bool
-	}
-
-	DNSBL struct {
-		Enable bool
-		Server string
-	}
-}
-
-func (h *Hook) MakeInstances() ([]hook.FromHook, []hook.DataHook, error) {
-	var (
-		from []hook.FromHook
-		data []hook.DataHook
-	)
-
-	if c := h.SPF; c.Enable {
-		from = append(from, hook.CheckSPF())
-	}
-
-	if c := h.DNSBL; c.Enable {
-		from = append(from, hook.CheckDNSBL(c.Server))
-	}
-
-	return from, data, nil
-}
+var WireSet = wire.NewSet(
+	FromHooks,
+	DataHooks,
+)

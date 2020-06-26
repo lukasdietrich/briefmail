@@ -1,4 +1,4 @@
-// Copyright (C) 2019  Lukas Dietrich <lukas@lukasdietrich.com>
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,24 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package config
+package storage
 
 import (
-	"github.com/BurntSushi/toml"
+	"github.com/google/wire"
 )
 
-type Config struct {
-	General General
-	Mail    Mail
-	Hook    Hook
-	TLS     TLS
-	Smtp    Smtp
-	Pop3    Pop3
-}
-
-func Parse(fileName string) (*Config, error) {
-	var config Config
-
-	_, err := toml.DecodeFile(fileName, &config)
-	return &config, err
-}
+var WireSet = wire.NewSet(
+	NewDB,
+	NewBlobs,
+	NewCache,
+	NewCleaner,
+)

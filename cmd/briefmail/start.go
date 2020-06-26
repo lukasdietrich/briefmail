@@ -19,122 +19,64 @@ import (
 	"crypto/tls"
 
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/addressbook"
-	"github.com/lukasdietrich/briefmail/config"
-	"github.com/lukasdietrich/briefmail/delivery"
 	"github.com/lukasdietrich/briefmail/pop3"
 	"github.com/lukasdietrich/briefmail/smtp"
 	"github.com/lukasdietrich/briefmail/textproto"
 )
 
-func start() cli.Command {
-	return cli.Command{
-		Name:  "start",
-		Usage: "Start smtp and pop3 servers",
-		Flags: []cli.Flag{
-			cli.StringFlag{
-				Name:   "config",
-				EnvVar: "BRIEFMAIL_CONFIG",
-				Value:  "config.toml",
-			},
-			cli.StringFlag{
-				Name:   "addressbook",
-				EnvVar: "BRIEFMAIL_ADDRESSBOOK",
-				Value:  "addressbook.toml",
-			},
-		},
-		Action: func(ctx *cli.Context) error {
-			config, err := config.Parse(ctx.String("config"))
-			if err != nil {
-				return err
-			}
+type serverConfig struct {
+	Address string
+	TLS     bool
+}
 
-			domains, err := config.General.NormalizedDomains()
-			if err != nil {
-				return err
-			}
+func init() {
+	viper.SetDefault("smtp", []serverConfig{
+		{Address: ":25"},
+		{Address: ":587"},
+	})
 
-			book, err := addressbook.Parse(ctx.String("addressbook"), domains, DB)
-			if err != nil {
-				return err
-			}
+	viper.SetDefault("pop3", []serverConfig{
+		{Address: ":110"},
+		{Address: ":995", TLS: true},
+	})
+}
 
-			queue := delivery.QueueWorker{
-				DB:    DB,
-				Blobs: Blobs,
-			}
+type startCommand struct {
+	Smtp      *smtp.Proto
+	Pop3      *pop3.Proto
+	TlsConfig *tls.Config
+}
 
-			mailman := delivery.NewMailman(&delivery.MailmanConfig{
-				DB:          DB,
-				Blobs:       Blobs,
-				Addressbook: book,
-				Queue:       &queue,
-			})
+func (s *startCommand) run() error {
+	viper.Debug()
 
-			tlsConfig, err := config.TLS.MakeTLSConfig()
-			if err != nil {
-				return err
-			}
+	startServers("smtp", s.Smtp, s.TlsConfig)
+	startServers("pop3", s.Pop3, s.TlsConfig)
 
-			fromHooks, dataHooks, err := config.Hook.MakeInstances()
-			if err != nil {
-				return err
-			}
+	return nil
+}
 
-			for _, instance := range config.Smtp {
-				go startServer(smtp.New(&smtp.Config{
-					Hostname:    config.General.Hostname,
-					MaxSize:     config.Mail.Size,
-					Mailman:     mailman,
-					Addressbook: book,
-					Cache:       Cache,
-					DB:          DB,
-					TLS:         tlsConfig,
-					FromHooks:   fromHooks,
-					DataHooks:   dataHooks,
-				}), instance.Address, tlsConfig, instance.TLS)
+func startServers(key string, proto textproto.Protocol, tlsConfig *tls.Config) {
+	var configs []serverConfig
+	viper.UnmarshalKey(key, &configs)
 
-				logrus.WithFields(logrus.Fields{
-					"address": instance.Address,
-					"tls":     instance.TLS,
-				}).Info("start smtp")
-			}
-
-			for _, instance := range config.Pop3 {
-				go startServer(pop3.New(&pop3.Config{
-					Hostname: config.General.Hostname,
-					DB:       DB,
-					Blobs:    Blobs,
-					TLS:      tlsConfig,
-				}), instance.Address, tlsConfig, instance.TLS)
-
-				logrus.WithFields(logrus.Fields{
-					"address": instance.Address,
-					"tls":     instance.TLS,
-				}).Infof("start pop3")
-			}
-
-			queue.WakeUp()
-
-			<-make(chan bool)
-			return nil
-		},
+	for _, config := range configs {
+		go startInstance(proto, config, tlsConfig)
 	}
 }
 
-func startServer(
-	proto textproto.Protocol,
-	addr string,
-	tlsConfig *tls.Config,
-	tlsOnly bool,
-) {
-	if !tlsOnly {
+func startInstance(proto textproto.Protocol, serverConfig serverConfig, tlsConfig *tls.Config) {
+	logrus.Infof("starting server on %s (force tls=%v)",
+		serverConfig.Address, serverConfig.TLS)
+
+	if !serverConfig.TLS {
 		tlsConfig = nil
 	}
 
-	if err := textproto.NewServer(proto, tlsConfig).Listen(addr); err != nil {
+	err := textproto.NewServer(proto, tlsConfig).Listen(serverConfig.Address)
+	if err != nil {
 		logrus.Fatal(err)
 	}
 }
