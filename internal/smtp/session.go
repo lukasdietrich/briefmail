@@ -18,9 +18,9 @@ package smtp
 import (
 	"time"
 
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/smtp/hook"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 type sessionState uint

@@ -19,7 +19,7 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 var (

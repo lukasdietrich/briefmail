@@ -22,7 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/zaccone/spf"
 
-	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func makeSpfHook() FromHook {

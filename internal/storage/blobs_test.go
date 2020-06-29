@@ -25,7 +25,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func TestBlobs(t *testing.T) {

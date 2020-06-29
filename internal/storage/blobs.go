@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func init() {

@@ -20,7 +20,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lukasdietrich/briefmail/normalize"
+	"github.com/lukasdietrich/briefmail/internal/normalize"
 )
 
 var (

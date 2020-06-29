@@ -21,9 +21,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/pop3"
-	"github.com/lukasdietrich/briefmail/smtp"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/pop3"
+	"github.com/lukasdietrich/briefmail/internal/smtp"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 type serverConfig struct {

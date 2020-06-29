@@ -23,8 +23,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/lukasdietrich/briefmail/storage"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 var log = logrus.WithField("prefix", "pop3")

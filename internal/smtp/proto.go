@@ -24,12 +24,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/addressbook"
-	"github.com/lukasdietrich/briefmail/delivery"
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/smtp/hook"
-	"github.com/lukasdietrich/briefmail/storage"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/addressbook"
+	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
+	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 var log = logrus.WithField("prefix", "smtp")

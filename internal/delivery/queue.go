@@ -30,9 +30,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/dns"
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/storage"
+	"github.com/lukasdietrich/briefmail/internal/dns"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
 var (

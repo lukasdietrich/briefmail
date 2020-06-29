@@ -18,8 +18,8 @@ package addressbook
 import (
 	"fmt"
 
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/normalize"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/normalize"
 )
 
 type EntryKind int

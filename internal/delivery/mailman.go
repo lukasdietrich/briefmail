@@ -18,9 +18,9 @@ package delivery
 import (
 	"fmt"
 
-	"github.com/lukasdietrich/briefmail/addressbook"
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/storage"
+	"github.com/lukasdietrich/briefmail/internal/addressbook"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
 type Mailman struct {

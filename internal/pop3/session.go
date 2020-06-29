@@ -18,8 +18,8 @@ package pop3
 import (
 	"time"
 
-	"github.com/lukasdietrich/briefmail/storage"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 type sessionState uint

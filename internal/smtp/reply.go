@@ -18,7 +18,7 @@ package smtp
 import (
 	"strconv"
 
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 type reply struct {

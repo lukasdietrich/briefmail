@@ -20,8 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/lukasdietrich/briefmail/model"
-	"github.com/lukasdietrich/briefmail/normalize"
+	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/normalize"
 )
 
 func TestSimple(t *testing.T) {

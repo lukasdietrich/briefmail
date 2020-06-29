@@ -16,25 +16,45 @@
 package pop3
 
 import (
-	"github.com/lukasdietrich/briefmail/textproto"
+	"bytes"
+
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
-type reply struct {
-	ok   bool
-	text string
+// command represents a command-line of the form:
+//
+//     <head> <SP> <tail> <CR> <LF>
+type command struct {
+	head []byte
+	tail []byte
 }
 
-// nolint:errcheck
-func (r *reply) writeTo(w textproto.Writer) error {
-	if r.ok {
-		w.WriteString("+OK")
-	} else {
-		w.WriteString("-ERR")
+func (c *command) readFrom(r textproto.Reader) error {
+	line, err := r.ReadLine()
+	if err != nil {
+		return err
 	}
 
-	w.WriteString(" ")
-	w.WriteString(r.text)
-	w.Endline()
+	c.parse(line)
+	return nil
+}
 
-	return w.Flush()
+func (c *command) parse(line []byte) {
+	space := bytes.IndexRune(line, ' ')
+
+	if space < 0 {
+		c.head = line
+		c.tail = nil
+	} else {
+		c.head = line[:space]
+		c.tail = line[space+1:]
+	}
+}
+
+func (c *command) args() [][]byte {
+	if len(c.tail) == 0 {
+		return nil
+	}
+
+	return bytes.Fields(c.tail)
 }

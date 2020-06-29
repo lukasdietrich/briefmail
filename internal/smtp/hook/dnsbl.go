@@ -22,8 +22,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/dns"
-	"github.com/lukasdietrich/briefmail/model"
+	"github.com/lukasdietrich/briefmail/internal/dns"
+	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func makeDnsblHook() FromHook {
