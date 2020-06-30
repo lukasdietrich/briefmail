@@ -21,10 +21,14 @@ jobs:
 
       - name: Tools
         run: |
+          go get github.com/google/wire/cmd/wire
           go get golang.org/x/lint/golint
 
-      - name: golint
-        run: golint ./...
+      - name: Build
+        run: make build
 
       - name: go vet
         run: go vet ./...
+
+      - name: golint
+        run: golint -set_exit_status ./...
