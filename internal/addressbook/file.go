@@ -27,6 +27,11 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
+func init() {
+	viper.SetDefault("general.domains", []string{"localhost"})
+	viper.SetDefault("addressbook.filename", "_example/addressbook.toml")
+}
+
 // [mailboxes]
 //   "name" = [ "address1@domain1", "address2@domain1" ]
 

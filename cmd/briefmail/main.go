@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -65,10 +66,7 @@ func main() {
 		configFilename string
 	)
 
-	flag.StringVar(&configFilename,
-		"config",
-		"config.toml",
-		"Path to configuration file")
+	flag.StringVar(&configFilename, "config", "", "Path to configuration file")
 	flag.Usage = printUsage
 	flag.Parse()
 
@@ -119,16 +117,27 @@ func setupLogger() {
 		logrus.Fatalf("unknown log level: %v", err)
 	}
 
+	logrus.Infof("setting log level to %v", logLevel)
 	logrus.SetLevel(logLevel)
 }
 
 func setupConfig(filename string) {
-	logrus.Infof("loading config file %s", filename)
-
 	viper.SetTypeByDefaultValue(true)
-	viper.SetEnvKeyReplacer(strings.NewReplacer("_", "."))
-	viper.SetEnvPrefix("BRIEFMAIL")
 	viper.AutomaticEnv()
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.SetEnvPrefix("BRIEFMAIL")
+
+	if filename != "" {
+		readConfig(filename)
+	} else {
+		logrus.Info("no config file provided. using environment only")
+	}
+
+	printConfig()
+}
+
+func readConfig(filename string) {
+	logrus.Infof("loading configuration from %v", filename)
 	viper.SetConfigFile(filename)
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -137,5 +146,14 @@ func setupConfig(filename string) {
 		} else {
 			logrus.Fatalf("could not load configuration: %v", err)
 		}
+	}
+}
+
+func printConfig() {
+	keys := viper.AllKeys()
+	sort.Strings(keys)
+
+	for _, key := range keys {
+		logrus.Debugf("%s = %#v", key, viper.Get(key))
 	}
 }
