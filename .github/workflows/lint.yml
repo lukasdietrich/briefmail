@@ -1,0 +1,30 @@
+name: Lint
+on: push
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [ 1.14 ]
+    name: Lint with Go ${{ matrix.go }}
+
+    steps:
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Tools
+        run: |
+          go get golang.org/x/lint/golint
+
+      - name: Lint: golint
+        run: golint ./...
+
+      - name: Lint: go vet
+        run: go vet ./...
