@@ -24,6 +24,8 @@ import (
 )
 
 var (
+	// ErrAlreadyTLS is returned if the connection already performed a tls
+	// handshake.
 	ErrAlreadyTLS = errors.New("textproto: already secured by tls")
 )
 
@@ -62,7 +64,7 @@ type conn struct {
 	Writer
 }
 
-func WrapConn(raw net.Conn) Conn {
+func wrapConn(raw net.Conn) Conn {
 	varConn := variableNetConn{Conn: raw}
 
 	return &conn{

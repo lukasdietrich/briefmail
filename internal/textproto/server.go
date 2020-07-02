@@ -70,9 +70,9 @@ func (s *server) Listen(addr string) error {
 }
 
 func (s *server) handle(conn net.Conn) {
-	defer conn.Close() // nolint:errcheck
+	defer conn.Close()
 
-	wrapped := WrapConn(conn)
+	wrapped := wrapConn(conn)
 
 	if s.tlsConfig != nil && wrapped.UpgradeTLS(s.tlsConfig) != nil {
 		return
