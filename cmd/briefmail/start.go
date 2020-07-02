@@ -17,6 +17,7 @@ package main
 
 import (
 	"crypto/tls"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -27,55 +28,71 @@ import (
 )
 
 type serverConfig struct {
+	// Address is the port and optional host to bind a server to.
 	Address string
-	TLS     bool
+	// TLS is a flag to indicate if the server should require a tls handshake
+	// on inbound connections. If set to false, the client can still initiate
+	// an upgrade during communication.
+	TLS bool
 }
 
-func init() {
-	viper.SetDefault("smtp", []serverConfig{
-		{Address: ":25"},
-		{Address: ":587"},
-	})
-
-	viper.SetDefault("pop3", []serverConfig{
-		{Address: ":110"},
-		{Address: ":995", TLS: true},
-	})
-}
-
+// startCommand is a dependency container for the `briefmail start` command.
+// It is used to wire the protocol implementations and tls configuration.
 type startCommand struct {
-	Smtp      *smtp.Proto
-	Pop3      *pop3.Proto
-	TlsConfig *tls.Config
+	// SMTPProto is the protocol implementation for an smtp server.
+	SMTPProto *smtp.Proto
+	// POP3Proto is the protocol implementation for a pop3 server.
+	POP3Proto *pop3.Proto
+	// TLSConfig is either nil or wraps the configured tls certificate source.
+	TLSConfig *tls.Config
 }
 
+// run starts smtp and pop3 servers on all configured ports.
 func (s *startCommand) run() error {
-	viper.Debug()
+	startServers("smtp", s.SMTPProto, s.TLSConfig)
+	startServers("pop3", s.POP3Proto, s.TLSConfig)
 
-	startServers("smtp", s.Smtp, s.TlsConfig)
-	startServers("pop3", s.Pop3, s.TlsConfig)
+	<-make(chan struct{})
+	return nil
+}
+
+// startServers first determines all instance configs for a protocol and then
+// starts a server for each entry.
+func startServers(protoName string, proto textproto.Protocol, tlsConfig *tls.Config) error {
+	configs, err := unmarshalServerConfigs(protoName)
+	if err != nil {
+		return fmt.Errorf("could not unmarshal %s server configuration: %w",
+			protoName, err)
+	}
+
+	if len(configs) == 0 {
+		logrus.Infof("no %s server configured", protoName)
+	}
+
+	for _, config := range configs {
+		logrus.Infof("starting %s server on %q (tls=%t)",
+			protoName, config.Address, config.TLS)
+
+		go startInstance(proto, config, tlsConfig)
+	}
 
 	return nil
 }
 
-func startServers(key string, proto textproto.Protocol, tlsConfig *tls.Config) {
+// unmarshalServerConfigs reads the config for either "pop3" or "smtp" and
+// unmarshals it into a slice of serverConfig.
+func unmarshalServerConfigs(protoName string) ([]serverConfig, error) {
 	var configs []serverConfig
-	viper.UnmarshalKey(key, &configs)
-
-	for _, config := range configs {
-		go startInstance(proto, config, tlsConfig)
-	}
+	return configs, viper.UnmarshalKey(protoName, &configs)
 }
 
-func startInstance(proto textproto.Protocol, serverConfig serverConfig, tlsConfig *tls.Config) {
-	logrus.Infof("starting server on %s (force tls=%v)",
-		serverConfig.Address, serverConfig.TLS)
-
-	if !serverConfig.TLS {
+// startInstance creates a new server instance and listens on the configured port.
+func startInstance(proto textproto.Protocol, config serverConfig, tlsConfig *tls.Config) {
+	if !config.TLS {
 		tlsConfig = nil
 	}
 
-	err := textproto.NewServer(proto, tlsConfig).Listen(serverConfig.Address)
+	err := textproto.NewServer(proto, tlsConfig).Listen(config.Address)
 	if err != nil {
 		logrus.Fatal(err)
 	}

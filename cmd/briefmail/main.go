@@ -19,6 +19,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 	"sort"
 	"strings"
@@ -56,7 +57,10 @@ func init() {
 		FullTimestamp:    true,
 		QuoteEmptyFields: true,
 		CallerPrettyfier: func(frame *runtime.Frame) (string, string) {
-			return frame.Func.Name(), ""
+			_, funcName := path.Split(frame.Function)
+			_, fileName := path.Split(frame.File)
+
+			return funcName, fmt.Sprintf("%s:%d", fileName, frame.Line)
 		},
 	})
 }
