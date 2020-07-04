@@ -16,8 +16,16 @@
 package textproto
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"net"
+	"sync"
+)
+
+var (
+	// ErrServerClosed is returned when a server is shut down.
+	ErrServerClosed = errors.New("textproto: server closed")
 )
 
 // Server is a general purpose tcp server for text based protocols like SMTP
@@ -27,6 +35,12 @@ type Server interface {
 	// An error is either returned when trying to bind the given address or
 	// whenever accepting a new connection fails.
 	Listen(addr string) error
+
+	// Shutdown gracefully shuts down the Server. Repeated calls are not supported
+	// and will result in a panic.
+	// Once called, no more connections will be established. Pending connections
+	// are still waited on until the context is canceled.
+	Shutdown(ctx context.Context)
 }
 
 // Protocol is an interface for text based protocol implementations.
@@ -40,17 +54,44 @@ type Protocol interface {
 type server struct {
 	proto     Protocol
 	tlsConfig *tls.Config
+	l         net.Listener
+	wg        sync.WaitGroup
+	conns     map[*conn]struct{}
+	closing   chan struct{}
 }
 
 // NewServer returns a Server using a specified protocol implementation.
 // If the provided *tls.Config is non-nil, the Server will accept only
 // connections over tls.
-// The Server has to be started explitly afterwards.
+// The Server has to be started explicitly afterwards.
 func NewServer(proto Protocol, tlsConfig *tls.Config) Server {
 	return &server{
 		proto:     proto,
 		tlsConfig: tlsConfig,
+		conns:     make(map[*conn]struct{}),
+		closing:   make(chan struct{}),
 	}
+}
+
+func (s *server) Shutdown(ctx context.Context) {
+	close(s.closing)
+	s.l.Close()
+
+	ctx, cancelFunc := context.WithCancel(ctx)
+	go s.waitForClients(cancelFunc)
+
+	<-ctx.Done()
+
+	for conn := range s.conns {
+		conn.raw.Close()
+	}
+}
+
+// waitForClients waits for all pending clients to close, before calling the
+// callback function.
+func (s *server) waitForClients(callback func()) {
+	s.wg.Wait()
+	callback()
 }
 
 func (s *server) Listen(addr string) error {
@@ -59,24 +100,51 @@ func (s *server) Listen(addr string) error {
 		return err
 	}
 
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			return err
-		}
+	s.l = l
 
-		go s.handle(conn)
+	for {
+		select {
+		case <-s.closing:
+			return ErrServerClosed
+
+		default:
+			if err := s.acceptConn(); err != nil {
+				return err
+			}
+		}
 	}
 }
 
-func (s *server) handle(conn net.Conn) {
-	defer conn.Close()
+func (s *server) acceptConn() error {
+	conn, err := s.l.Accept()
+	if err != nil {
+		select {
+		case <-s.closing:
+			return ErrServerClosed
 
-	wrapped := wrapConn(conn)
-
-	if s.tlsConfig != nil && wrapped.UpgradeTLS(s.tlsConfig) != nil {
-		return
+		default:
+			return err
+		}
 	}
 
-	s.proto.Handle(wrapped)
+	s.wg.Add(1)
+
+	go s.handle(wrapConn(conn))
+	return nil
+}
+
+func (s *server) handle(c *conn) {
+	defer s.wg.Done()
+	defer delete(s.conns, c)
+	defer c.raw.Close()
+
+	s.conns[c] = struct{}{}
+
+	if s.tlsConfig != nil {
+		if c.UpgradeTLS(s.tlsConfig) != nil {
+			return
+		}
+	}
+
+	s.proto.Handle(c)
 }

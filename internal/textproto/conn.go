@@ -64,7 +64,7 @@ type conn struct {
 	Writer
 }
 
-func wrapConn(raw net.Conn) Conn {
+func wrapConn(raw net.Conn) *conn {
 	varConn := variableNetConn{Conn: raw}
 
 	return &conn{

@@ -16,8 +16,15 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -49,51 +56,126 @@ type startCommand struct {
 
 // run starts smtp and pop3 servers on all configured ports.
 func (s *startCommand) run() error {
-	startServers("smtp", s.SMTPProto, s.TLSConfig)
-	startServers("pop3", s.POP3Proto, s.TLSConfig)
+	servers := instanceManager{
+		smtpProto: s.SMTPProto,
+		pop3Proto: s.POP3Proto,
+		tlsConfig: s.TLSConfig,
+	}
 
-	<-make(chan struct{})
+	if err := servers.start(); err != nil {
+		return err
+	}
+
+	s.handleSignals(&servers)
 	return nil
 }
 
-// startServers first determines all instance configs for a protocol and then
-// starts a server for each entry.
-func startServers(protoName string, proto textproto.Protocol, tlsConfig *tls.Config) error {
-	configs, err := unmarshalServerConfigs(protoName)
-	if err != nil {
-		return fmt.Errorf("could not unmarshal %s server configuration: %w",
-			protoName, err)
+// handleSignals waits for SIGINT or SIGTERM and then tries to gracefully
+// shutdown all servers. If another signal is captured, the shutdown will be
+// forced immediately.
+func (s *startCommand) handleSignals(servers *instanceManager) {
+	const timeout = time.Second * 30
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	logrus.Info("waiting for shutdown signals..")
+	<-signals
+
+	logrus.Info("trying to shutdown gracefully")
+
+	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
+	go servers.shutdown(ctx, cancelFunc)
+
+	select {
+	case <-signals:
+		logrus.Info("shutting down forcefully now")
+		cancelFunc()
+
+	case <-ctx.Done():
+	}
+}
+
+// instanceManager is a container for all configured server instances.
+// It also keeps track of how many servers are still running.
+type instanceManager struct {
+	smtpProto textproto.Protocol
+	pop3Proto textproto.Protocol
+	tlsConfig *tls.Config
+	servers   []textproto.Server
+	wg        sync.WaitGroup
+}
+
+// shutdown tries to gracefully shutdown all started server instances.
+func (i *instanceManager) shutdown(ctx context.Context, cancelFunc context.CancelFunc) {
+	for _, server := range i.servers {
+		go i.shutdownInstance(ctx, server)
 	}
 
-	if len(configs) == 0 {
-		logrus.Infof("no %s server configured", protoName)
+	i.wg.Wait()
+	logrus.Info("all servers stopped gracefully")
+	cancelFunc()
+}
+
+// shutdownInstance tries to gracefully shutdown a single server instance.
+func (i *instanceManager) shutdownInstance(ctx context.Context, server textproto.Server) {
+	server.Shutdown(ctx)
+	i.wg.Done()
+}
+
+// start reads all configured smtp and pop3 servers and then starts all of them.
+func (i *instanceManager) start() error {
+	for protoName, proto := range map[string]textproto.Protocol{
+		"smtp": i.smtpProto,
+		"pop3": i.pop3Proto,
+	} {
+		configSlice, err := unmarshalServerConfigs(protoName)
+		if err != nil {
+			return fmt.Errorf("could not unmarshal %s server configuration: %w",
+				protoName, err)
+		}
+
+		if len(configSlice) == 0 {
+			logrus.Warnf("%s is not configured", protoName)
+			continue
+		}
+
+		for _, config := range configSlice {
+			logrus.Infof("starting %s server on %q (tls=%t)",
+				protoName, config.Address, config.TLS)
+
+			var tlsConfig *tls.Config
+			if config.TLS {
+				tlsConfig = i.tlsConfig
+			}
+
+			server := textproto.NewServer(proto, tlsConfig)
+			i.servers = append(i.servers, server)
+			go i.startInstance(server, config.Address)
+		}
 	}
 
-	for _, config := range configs {
-		logrus.Infof("starting %s server on %q (tls=%t)",
-			protoName, config.Address, config.TLS)
-
-		go startInstance(proto, config, tlsConfig)
-	}
-
+	i.wg.Add(len(i.servers))
 	return nil
+}
+
+// startInstance starts a single server instance. All errors except
+// textproto.ErrServerClosed are logged and cause a panic.
+func (i *instanceManager) startInstance(server textproto.Server, addr string) {
+	if err := server.Listen(addr); err != nil {
+		if !errors.Is(err, textproto.ErrServerClosed) {
+			logrus.Fatal(err)
+		}
+	}
+
+	logrus.Infof("server %s stopped", addr)
 }
 
 // unmarshalServerConfigs reads the config for either "pop3" or "smtp" and
 // unmarshals it into a slice of serverConfig.
 func unmarshalServerConfigs(protoName string) ([]serverConfig, error) {
+	logrus.Debugf("reading %s configuration", protoName)
+
 	var configs []serverConfig
 	return configs, viper.UnmarshalKey(protoName, &configs)
-}
-
-// startInstance creates a new server instance and listens on the configured port.
-func startInstance(proto textproto.Protocol, config serverConfig, tlsConfig *tls.Config) {
-	if !config.TLS {
-		tlsConfig = nil
-	}
-
-	err := textproto.NewServer(proto, tlsConfig).Listen(config.Address)
-	if err != nil {
-		logrus.Fatal(err)
-	}
 }
