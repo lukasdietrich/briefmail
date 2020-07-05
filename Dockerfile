@@ -23,5 +23,5 @@ FROM alpine:latest
 
 	EXPOSE 25/tcp 587/tcp 110/tcp 995/tcp
 
-	ENTRYPOINT [ "/app/briefmail" ]
-	CMD [ "start", "-config", "/data/config.toml" ]
+	ENTRYPOINT [ "/app/briefmail", "-config", "/data/config.toml" ]
+	CMD [ "start" ]
