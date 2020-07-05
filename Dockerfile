@@ -1,27 +1,27 @@
 FROM golang:alpine as build
+	WORKDIR /build
+	COPY . .
 
-WORKDIR /temp/build
-COPY . .
-
-RUN apk --no-cache add build-base git && make clean build
+	RUN apk --no-cache add build-base git \
+		&& go get github.com/google/wire/cmd/wire \
+		&& make
 
 FROM alpine:latest
+	WORKDIR /app
+	COPY --from=build /build/target/briefmail  ./
+	COPY LICENSE README.md ./
 
-WORKDIR /opt/briefmail
-COPY --from=build /temp/build/target/briefmail /opt/briefmail/bin/briefmail
+	RUN apk --no-cache add ca-certificates
 
-RUN apk --no-cache add ca-certificates
+	VOLUME [ "/data" ]
 
-VOLUME [ "/opt/briefmail/etc", "/opt/briefmail/var" ]
+	ENV BRIEFMAIL_LOG_LEVEL=DEBUG \
+		BRIEFMAIL_ADDRESSBOOK_FILENAME=/data/addressbook.toml \
+		BRIEFMAIL_STORAGE_BLOBS_FOLDERNAME=/data/blobs \
+		BRIEFMAIL_STORAGE_CACHE_FOLDERNAME=/data/cache \
+		BRIEFMAIL_STORAGE_DATABASE_FILENAME=/data/db.sqlite
 
-ENV BRIEFMAIL_CONFIG /opt/briefmail/etc/config.toml
-ENV BRIEFMAIL_ADDRESSBOOK /opt/briefmail/etc/addressbook.toml
-ENV BRIEFMAIL_DATA /opt/briefmail/var
-ENV PATH /opt/briefmail/bin:${PATH}
+	EXPOSE 25/tcp 587/tcp 110/tcp 995/tcp
 
-EXPOSE 25/tcp
-EXPOSE 587/tcp
-EXPOSE 110/tcp
-EXPOSE 995/tcp
-
-CMD [ "briefmail", "start" ]
+	ENTRYPOINT [ "/app/briefmail" ]
+	CMD [ "start", "-config", "/data/config.toml" ]
