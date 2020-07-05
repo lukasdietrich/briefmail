@@ -19,8 +19,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -52,16 +50,9 @@ var (
 func init() {
 	viper.SetDefault("log.level", "debug")
 
-	logrus.SetReportCaller(true)
 	logrus.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp:    true,
 		QuoteEmptyFields: true,
-		CallerPrettyfier: func(frame *runtime.Frame) (string, string) {
-			_, funcName := path.Split(frame.Function)
-			_, fileName := path.Split(frame.File)
-
-			return funcName, fmt.Sprintf("%s:%d", fileName, frame.Line)
-		},
 	})
 }
 
