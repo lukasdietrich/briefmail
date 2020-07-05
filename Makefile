@@ -1,40 +1,28 @@
-export GO111MODULE=on
+VERSION  = $(shell git describe --always --dirty)
 
-SOURCE = $(wildcard */*.go) $(wildcard */*/*.go)
-TARGET = ./target
-BINARY = $(TARGET)/briefmail
+MAIN_PKG = ./cmd/briefmail
+TARGET   = ./target
+SOURCE   = $(shell find . -name "*.go" ! -name "*_gen.go")
+BINARY   = $(TARGET)/briefmail
+WIRE_GEN = $(MAIN_PKG)/wire_gen.go
 
-.PHONY: all most clean tidy test lint build run
+.PHONY: all
+all: clean build
 
-all: most lint
-
-most: clean tidy build test
-
+.PHONY: clean
 clean:
-	-rm -r $(TARGET)
+	rm -rf $(TARGET)
+	rm -f $(WIRE_GEN)
 
-tidy:
-	go mod tidy
-
-test:
-	go test -cover ./...
-
-lint:
-	go vet ./...
-	golint ./...
-
+.PHONY: build
 build: $(BINARY)
 
-run: $(BINARY)
-	$(BINARY) \
-		--verbose \
-		start \
-		--config _example/config.toml \
-		--addressbook _example/addressbook.toml
+$(WIRE_GEN): $(SOURCE)
+	wire ./...
 
-$(BINARY): $(SOURCE)
+$(BINARY): $(SOURCE) $(WIRE_GEN)
 	mkdir -p $(TARGET)
 	go build \
 		-o $(BINARY) \
-		-ldflags '-X "main.Version=$(shell git log -1 --pretty=format:"%h (%ai)")"' \
-		./cmd/briefmail
+		-ldflags '-X "main.Version=$(VERSION)"' \
+		$(MAIN_PKG)

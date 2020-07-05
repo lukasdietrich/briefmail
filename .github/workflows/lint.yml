@@ -1,14 +1,14 @@
-name: Build & Test
+name: Lint
 on: push
 
 jobs:
 
-  build:
+  lint:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: [ 1.13, 1.14 ]
-    name: Build & Test with Go ${{ matrix.go }}
+        go: [ 1.14 ]
+    name: Lint with Go ${{ matrix.go }}
 
     steps:
       - name: Set up Go ${{ matrix.go }}
@@ -22,9 +22,13 @@ jobs:
       - name: Tools
         run: |
           go get github.com/google/wire/cmd/wire
+          go get golang.org/x/lint/golint
 
       - name: Build
         run: make build
 
-      - name: Test
-        run: go test ./...
+      - name: go vet
+        run: go vet ./...
+
+      - name: golint
+        run: golint -set_exit_status ./...

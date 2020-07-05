@@ -1,4 +1,4 @@
-vendor/
 target/
 data/
-cert/
+
+wire_gen.go

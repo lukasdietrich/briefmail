@@ -16,125 +16,166 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
+	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/urfave/cli"
+	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/addressbook"
-	"github.com/lukasdietrich/briefmail/config"
-	"github.com/lukasdietrich/briefmail/delivery"
-	"github.com/lukasdietrich/briefmail/pop3"
-	"github.com/lukasdietrich/briefmail/smtp"
-	"github.com/lukasdietrich/briefmail/textproto"
+	"github.com/lukasdietrich/briefmail/internal/pop3"
+	"github.com/lukasdietrich/briefmail/internal/smtp"
+	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
-func start() cli.Command {
-	return cli.Command{
-		Name:  "start",
-		Usage: "Start smtp and pop3 servers",
-		Flags: []cli.Flag{
-			cli.StringFlag{
-				Name:   "config",
-				EnvVar: "BRIEFMAIL_CONFIG",
-				Value:  "config.toml",
-			},
-			cli.StringFlag{
-				Name:   "addressbook",
-				EnvVar: "BRIEFMAIL_ADDRESSBOOK",
-				Value:  "addressbook.toml",
-			},
-		},
-		Action: func(ctx *cli.Context) error {
-			config, err := config.Parse(ctx.String("config"))
-			if err != nil {
-				return err
-			}
+type serverConfig struct {
+	// Address is the port and optional host to bind a server to.
+	Address string
+	// TLS is a flag to indicate if the server should require a tls handshake
+	// on inbound connections. If set to false, the client can still initiate
+	// an upgrade during communication.
+	TLS bool
+}
 
-			domains, err := config.General.NormalizedDomains()
-			if err != nil {
-				return err
-			}
+// startCommand is a dependency container for the `briefmail start` command.
+// It is used to wire the protocol implementations and tls configuration.
+type startCommand struct {
+	// SMTPProto is the protocol implementation for an smtp server.
+	SMTPProto *smtp.Proto
+	// POP3Proto is the protocol implementation for a pop3 server.
+	POP3Proto *pop3.Proto
+	// TLSConfig is either nil or wraps the configured tls certificate source.
+	TLSConfig *tls.Config
+}
 
-			book, err := addressbook.Parse(ctx.String("addressbook"), domains, DB)
-			if err != nil {
-				return err
-			}
+// run starts smtp and pop3 servers on all configured ports.
+func (s *startCommand) run() error {
+	servers := instanceManager{
+		smtpProto: s.SMTPProto,
+		pop3Proto: s.POP3Proto,
+		tlsConfig: s.TLSConfig,
+	}
 
-			queue := delivery.QueueWorker{
-				DB:    DB,
-				Blobs: Blobs,
-			}
+	if err := servers.start(); err != nil {
+		return err
+	}
 
-			mailman := delivery.NewMailman(&delivery.MailmanConfig{
-				DB:          DB,
-				Blobs:       Blobs,
-				Addressbook: book,
-				Queue:       &queue,
-			})
+	s.handleSignals(&servers)
+	return nil
+}
 
-			tlsConfig, err := config.TLS.MakeTLSConfig()
-			if err != nil {
-				return err
-			}
+// handleSignals waits for SIGINT or SIGTERM and then tries to gracefully
+// shutdown all servers. If another signal is captured, the shutdown will be
+// forced immediately.
+func (s *startCommand) handleSignals(servers *instanceManager) {
+	const timeout = time.Second * 30
 
-			fromHooks, dataHooks, err := config.Hook.MakeInstances()
-			if err != nil {
-				return err
-			}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
-			for _, instance := range config.Smtp {
-				go startServer(smtp.New(&smtp.Config{
-					Hostname:    config.General.Hostname,
-					MaxSize:     config.Mail.Size,
-					Mailman:     mailman,
-					Addressbook: book,
-					Cache:       Cache,
-					DB:          DB,
-					TLS:         tlsConfig,
-					FromHooks:   fromHooks,
-					DataHooks:   dataHooks,
-				}), instance.Address, tlsConfig, instance.TLS)
+	logrus.Info("waiting for shutdown signals..")
+	<-signals
 
-				logrus.WithFields(logrus.Fields{
-					"address": instance.Address,
-					"tls":     instance.TLS,
-				}).Info("start smtp")
-			}
+	logrus.Info("trying to shutdown gracefully")
 
-			for _, instance := range config.Pop3 {
-				go startServer(pop3.New(&pop3.Config{
-					Hostname: config.General.Hostname,
-					DB:       DB,
-					Blobs:    Blobs,
-					TLS:      tlsConfig,
-				}), instance.Address, tlsConfig, instance.TLS)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
+	go servers.shutdown(ctx, cancelFunc)
 
-				logrus.WithFields(logrus.Fields{
-					"address": instance.Address,
-					"tls":     instance.TLS,
-				}).Infof("start pop3")
-			}
+	select {
+	case <-signals:
+		logrus.Info("shutting down forcefully now")
+		cancelFunc()
 
-			queue.WakeUp()
-
-			<-make(chan bool)
-			return nil
-		},
+	case <-ctx.Done():
 	}
 }
 
-func startServer(
-	proto textproto.Protocol,
-	addr string,
-	tlsConfig *tls.Config,
-	tlsOnly bool,
-) {
-	if !tlsOnly {
-		tlsConfig = nil
+// instanceManager is a container for all configured server instances.
+// It also keeps track of how many servers are still running.
+type instanceManager struct {
+	smtpProto textproto.Protocol
+	pop3Proto textproto.Protocol
+	tlsConfig *tls.Config
+	servers   []textproto.Server
+	wg        sync.WaitGroup
+}
+
+// shutdown tries to gracefully shutdown all started server instances.
+func (i *instanceManager) shutdown(ctx context.Context, cancelFunc context.CancelFunc) {
+	for _, server := range i.servers {
+		go i.shutdownInstance(ctx, server)
 	}
 
-	if err := textproto.NewServer(proto, tlsConfig).Listen(addr); err != nil {
-		logrus.Fatal(err)
+	i.wg.Wait()
+	logrus.Info("all servers stopped gracefully")
+	cancelFunc()
+}
+
+// shutdownInstance tries to gracefully shutdown a single server instance.
+func (i *instanceManager) shutdownInstance(ctx context.Context, server textproto.Server) {
+	server.Shutdown(ctx)
+	i.wg.Done()
+}
+
+// start reads all configured smtp and pop3 servers and then starts all of them.
+func (i *instanceManager) start() error {
+	for protoName, proto := range map[string]textproto.Protocol{
+		"smtp": i.smtpProto,
+		"pop3": i.pop3Proto,
+	} {
+		configSlice, err := unmarshalServerConfigs(protoName)
+		if err != nil {
+			return fmt.Errorf("could not unmarshal %s server configuration: %w",
+				protoName, err)
+		}
+
+		if len(configSlice) == 0 {
+			logrus.Warnf("%s is not configured", protoName)
+			continue
+		}
+
+		for _, config := range configSlice {
+			logrus.Infof("starting %s server on %q (tls=%t)",
+				protoName, config.Address, config.TLS)
+
+			var tlsConfig *tls.Config
+			if config.TLS {
+				tlsConfig = i.tlsConfig
+			}
+
+			server := textproto.NewServer(proto, tlsConfig)
+			i.servers = append(i.servers, server)
+			go i.startInstance(server, config.Address)
+		}
 	}
+
+	i.wg.Add(len(i.servers))
+	return nil
+}
+
+// startInstance starts a single server instance. All errors except
+// textproto.ErrServerClosed are logged and cause a panic.
+func (i *instanceManager) startInstance(server textproto.Server, addr string) {
+	if err := server.Listen(addr); err != nil {
+		if !errors.Is(err, textproto.ErrServerClosed) {
+			logrus.Fatal(err)
+		}
+	}
+
+	logrus.Infof("server %s stopped", addr)
+}
+
+// unmarshalServerConfigs reads the config for either "pop3" or "smtp" and
+// unmarshals it into a slice of serverConfig.
+func unmarshalServerConfigs(protoName string) ([]serverConfig, error) {
+	logrus.Debugf("reading %s configuration", protoName)
+
+	var configs []serverConfig
+	return configs, viper.UnmarshalKey(protoName, &configs)
 }
