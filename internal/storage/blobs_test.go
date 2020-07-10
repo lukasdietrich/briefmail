@@ -24,8 +24,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func TestBlobs(t *testing.T) {
@@ -33,46 +31,49 @@ func TestBlobs(t *testing.T) {
 		blobs = Blobs{fs: afero.NewMemMapFs()}
 		data  = make([]byte, 2<<16)
 
-		id model.ID
-		n  int64
+		id uuid.UUID
 	)
 
 	rand.Seed(23980234)
-	_, err := rand.Read(data)
-	assert.Nil(t, err)
+	n, err := rand.Read(data)
+	assert.NoError(t, err)
+	assert.Equal(t, len(data), n)
 
 	t.Run("ReadNil", func(t *testing.T) {
-		_, err := blobs.Read(uuid.Nil)
+		_, err := blobs.Reader(uuid.Nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("Write", func(t *testing.T) {
+		var n int64
 		id, n, err = blobs.Write(bytes.NewReader(data))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 		assert.NotEqual(t, uuid.Nil, id)
-		assert.EqualValues(t, n, len(data))
+		assert.EqualValues(t, len(data), n)
 	})
 
 	t.Run("Read", func(t *testing.T) {
-		r, err := blobs.Read(id)
-		assert.Nil(t, err)
+		r, err := blobs.Reader(id)
+		assert.NoError(t, err)
+
 		b, err := ioutil.ReadAll(r)
-		assert.Nil(t, err)
-		assert.Nil(t, r.Close())
+		assert.NoError(t, err)
+		assert.NoError(t, r.Close())
 		assert.Equal(t, data, b)
 	})
 
 	t.Run("ReadOffset", func(t *testing.T) {
-		r, err := blobs.ReadOffset(id, 420)
-		assert.Nil(t, err)
+		r, err := blobs.OffsetReader(id, 420)
+		assert.NoError(t, err)
+
 		b, err := ioutil.ReadAll(r)
-		assert.Nil(t, err)
-		assert.Nil(t, r.Close())
+		assert.NoError(t, err)
+		assert.NoError(t, r.Close())
 		assert.Equal(t, data[420:], b)
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		assert.Nil(t, blobs.Delete(id))
+		assert.NoError(t, blobs.Delete(id))
 		assert.Error(t, blobs.Delete(id))
 	})
 }

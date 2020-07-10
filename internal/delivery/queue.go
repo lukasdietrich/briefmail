@@ -147,7 +147,7 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 
 		defer c.close()
 
-		r, err := q.Blobs.ReadOffset(mail.ID, mail.Offset)
+		r, err := q.Blobs.OffsetReader(mail.ID, mail.Offset)
 		if err != nil {
 			pending = append(pending, addresses...)
 			continue

@@ -22,24 +22,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
-
-	"github.com/lukasdietrich/briefmail/internal/model"
 )
 
 func init() {
 	viper.SetDefault("storage.blobs.foldername", "data/blobs")
 }
 
+// Blobs is a permanent storage for blobs of data.
 type Blobs struct {
 	fs afero.Fs
 }
 
-func NewInMemoryBlobs() (*Blobs, error) {
-	return &Blobs{
-		fs: afero.NewMemMapFs(),
-	}, nil
-}
-
+// NewBlobs creates a new blobs store using configuration from viper.
+//
+// `storage.blobs.foldername` is the foldername for blob files.
 func NewBlobs() (*Blobs, error) {
 	folderName := viper.GetString("storage.blobs.foldername")
 
@@ -52,8 +48,13 @@ func NewBlobs() (*Blobs, error) {
 	}, nil
 }
 
-func (b *Blobs) Write(r io.Reader) (model.ID, int64, error) {
-	id := model.NewID()
+// Write copies all the data from r to a blob, that is addressable by the
+// returned uuid.
+func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return uuid.Nil, -1, err
+	}
 
 	f, err := b.fs.Create(id.String())
 	if err != nil {
@@ -62,8 +63,8 @@ func (b *Blobs) Write(r io.Reader) (model.ID, int64, error) {
 
 	size, err := io.Copy(f, r)
 	if err != nil {
-		f.Close()    // nolint:errcheck
-		b.Delete(id) // nolint:errcheck
+		f.Close()
+		b.Delete(id)
 
 		return uuid.Nil, -1, err
 	}
@@ -71,11 +72,14 @@ func (b *Blobs) Write(r io.Reader) (model.ID, int64, error) {
 	return id, size, f.Close()
 }
 
-func (b *Blobs) Delete(id model.ID) error {
+// Delete removes a blob by id.
+func (b *Blobs) Delete(id uuid.UUID) error {
 	return b.fs.Remove(id.String())
 }
 
-func (b *Blobs) ReadOffset(id model.ID, offset int64) (io.ReadCloser, error) {
+// OffsetReader returns a reader to a blob with an initial offset to be skipped.
+// The responsibiltiy to close the reader is on the caller.
+func (b *Blobs) OffsetReader(id uuid.UUID, offset int64) (io.ReadCloser, error) {
 	f, err := b.fs.Open(id.String())
 	if err != nil {
 		return nil, err
@@ -88,6 +92,7 @@ func (b *Blobs) ReadOffset(id model.ID, offset int64) (io.ReadCloser, error) {
 	return f, err
 }
 
-func (b *Blobs) Read(id model.ID) (io.ReadCloser, error) {
-	return b.ReadOffset(id, 0)
+// Reader is a shorthand for OffsetReader(id, 0)
+func (b *Blobs) Reader(id uuid.UUID) (io.ReadCloser, error) {
+	return b.OffsetReader(id, 0)
 }

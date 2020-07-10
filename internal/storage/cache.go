@@ -30,7 +30,7 @@ func init() {
 	viper.SetDefault("storage.cache.memoryLimit", 1<<20) // 1 Megabyte
 }
 
-// Cache is a storage for temporary blobs of data.
+// Cache is a temporary storage for blobs of data.
 type Cache struct {
 	fs          afero.Fs
 	memoryLimit int64

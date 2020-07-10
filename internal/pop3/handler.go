@@ -309,7 +309,7 @@ func retr(blobs *storage.Blobs) handler {
 			return err
 		}
 
-		r, err := blobs.Read(s.mailbox.entries[n].MailID)
+		r, err := blobs.Reader(s.mailbox.entries[n].MailID)
 		if err != nil {
 			return err
 		}
