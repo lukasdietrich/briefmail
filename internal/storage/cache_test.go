@@ -34,41 +34,47 @@ func TestCache(t *testing.T) {
 	data := make([]byte, 2048)
 
 	rand.Seed(82347232)
-	_, err := rand.Read(data)
-	assert.Nil(t, err)
+	n, err := rand.Read(data)
+	assert.NoError(t, err)
+	assert.Equal(t, len(data), n)
 
 	t.Run("InMemory", func(t *testing.T) {
-		entry, err := cache.Write(bytes.NewReader(data[:512]))
-		assert.Nil(t, err)
+		entry, err := cache.Write(bytes.NewReader(data[:1023]))
+		assert.NoError(t, err)
+		assert.NotNil(t, entry)
+		assert.NotNil(t, entry.memory)
 		assert.Nil(t, entry.file)
 
 		for i := 0; i < 3; i++ {
 			r, err := entry.Reader()
-			assert.Nil(t, err)
+			assert.NoError(t, err)
+			assert.NotNil(t, r)
 
 			b, err := ioutil.ReadAll(r)
-			assert.Nil(t, err)
-
-			assert.Equal(t, data[:512], b)
+			assert.NoError(t, err)
+			assert.Equal(t, data[:1023], b)
 		}
 
-		assert.Nil(t, entry.Release())
+		assert.NoError(t, entry.Release())
 	})
 
 	t.Run("OnDisk", func(t *testing.T) {
 		entry, err := cache.Write(bytes.NewReader(data))
-		assert.Nil(t, err)
+		assert.NoError(t, err)
+		assert.NotNil(t, entry)
 		assert.Nil(t, entry.memory)
+		assert.NotNil(t, entry.file)
+
 		_, err = cache.fs.Stat(entry.file.Name())
-		assert.Nil(t, err)
+		assert.NoError(t, err)
 
 		for i := 0; i < 3; i++ {
 			r, err := entry.Reader()
-			assert.Nil(t, err)
+			assert.NoError(t, err)
+			assert.NotNil(t, r)
 
 			b, err := ioutil.ReadAll(r)
-			assert.Nil(t, err)
-
+			assert.NoError(t, err)
 			assert.Equal(t, data, b)
 		}
 

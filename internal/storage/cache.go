@@ -26,21 +26,20 @@ import (
 )
 
 func init() {
-	viper.SetDefault("storage.cache.foldername", "data/temp")
-	viper.SetDefault("storage.cache.memoryLimit", 1048576)
+	viper.SetDefault("storage.cache.foldername", "data/cache")
+	viper.SetDefault("storage.cache.memoryLimit", 1<<20) // 1 Megabyte
 }
 
+// Cache is a storage for temporary blobs of data.
 type Cache struct {
 	fs          afero.Fs
 	memoryLimit int64
 }
 
-func NewMemoryCache() (*Cache, error) {
-	return &Cache{
-		fs: afero.NewMemMapFs(),
-	}, nil
-}
-
+// NewCache creates a new cache using configuration from viper.
+//
+// `storage.cache.memoryLimit` is the maximum size of data written in memory.
+// `storage.cache.foldername` is the foldername of temporary files.
 func NewCache() (*Cache, error) {
 	var (
 		folderName  = viper.GetString("storage.cache.foldername")
@@ -57,6 +56,8 @@ func NewCache() (*Cache, error) {
 	}, nil
 }
 
+// Write copies all the data from r into temporary storage. If the total size
+// exceeds the configured limit, the data will be written to disk.
 func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 	memory := bytes.NewBuffer(nil)
 
@@ -66,9 +67,7 @@ func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 	}
 
 	if n < b.memoryLimit {
-		return &CacheEntry{
-			memory: memory,
-		}, nil
+		return &CacheEntry{memory: memory}, nil
 	}
 
 	file, err := b.fs.Create(uuid.New().String())
@@ -77,23 +76,23 @@ func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 	}
 
 	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
-		file.Close()             // nolint:errcheck
-		b.fs.Remove(file.Name()) // nolint:errcheck
+		file.Close()
+		b.fs.Remove(file.Name())
 		return nil, err
 	}
 
-	return &CacheEntry{
-		file: file,
-		fs:   b.fs,
-	}, nil
+	return &CacheEntry{file: file, fs: b.fs}, nil
 }
 
+// CacheEntry is a single blob of data kept in temporary storage.
 type CacheEntry struct {
 	memory *bytes.Buffer
 	file   afero.File
 	fs     afero.Fs
 }
 
+// Release deletes data on disk, that may have been written. If the size of the
+// cache entry is smaller than the memory limit, this is a noop.
 func (e *CacheEntry) Release() error {
 	if e.file != nil {
 		if err := e.file.Close(); err != nil {
@@ -106,6 +105,8 @@ func (e *CacheEntry) Release() error {
 	return nil
 }
 
+// Reader returns a new reader to the full blob of data. This essentially seeks
+// the start of the file and is therefore not safe for concurrent use.
 func (e *CacheEntry) Reader() (io.Reader, error) {
 	if e.file != nil {
 		if _, err := e.file.Seek(0, io.SeekStart); err != nil {
