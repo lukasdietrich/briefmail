@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 )
@@ -61,6 +62,8 @@ func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
 		return uuid.Nil, -1, err
 	}
 
+	logrus.Debugf("writing blob %s", id)
+
 	size, err := io.Copy(f, r)
 	if err != nil {
 		f.Close()
@@ -74,6 +77,7 @@ func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
 
 // Delete removes a blob by id.
 func (b *Blobs) Delete(id uuid.UUID) error {
+	logrus.Debugf("removing blob %s", id)
 	return b.fs.Remove(id.String())
 }
 

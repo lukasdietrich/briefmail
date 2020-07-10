@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 )
@@ -75,6 +76,9 @@ func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 		return nil, err
 	}
 
+	logrus.Debugf("cache entry exceeding %d, evading to temporary file %s",
+		b.memoryLimit, file.Name())
+
 	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
 		file.Close()
 		b.fs.Remove(file.Name())
@@ -95,6 +99,8 @@ type CacheEntry struct {
 // cache entry is smaller than the memory limit, this is a noop.
 func (e *CacheEntry) Release() error {
 	if e.file != nil {
+		logrus.Debugf("removing cache file %s", e.file.Name())
+
 		if err := e.file.Close(); err != nil {
 			return err
 		}
