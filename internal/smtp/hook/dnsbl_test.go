@@ -25,8 +25,9 @@ import (
 
 func TestFormatReverseIP(t *testing.T) {
 	for ip, expected := range map[string]string{
-		"192.0.2.99":                "99.2.0.192",
-		"2001:db8:1:2:3:4:567:89ab": "b.a.9.8.7.6.5.0.4.0.0.0.3.0.0.0.2.0.0.0.1.0.0.0.8.b.d.0.1.0.0.2",
+		"192.0.2.99":                "99.2.0.192.",
+		"111.122.133.144":           "144.133.122.111.",
+		"2001:db8:1:2:3:4:567:89ab": "b.a.9.8.7.6.5.0.4.0.0.0.3.0.0.0.2.0.0.0.1.0.0.0.8.b.d.0.1.0.0.2.",
 	} {
 		t.Run(ip, func(t *testing.T) {
 			actual := formatReverseIP(net.ParseIP(ip))
