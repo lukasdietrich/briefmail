@@ -36,11 +36,16 @@ func TestFormatReverseIP(t *testing.T) {
 }
 
 func TestDnsblHook(t *testing.T) {
+	const (
+		badIP  = "127.0.0.2"
+		goodIP = "127.0.0.1"
+	)
+
 	hook := makeDnsblHook()
 	require.NotNil(t, hook)
 
 	t.Run("BadRecord", func(t *testing.T) {
-		result, err := hook(false, net.ParseIP("127.0.0.2"), nil)
+		result, err := hook(false, net.ParseIP(badIP), nil)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.True(t, result.Reject)
@@ -48,7 +53,15 @@ func TestDnsblHook(t *testing.T) {
 	})
 
 	t.Run("GoodRecord", func(t *testing.T) {
-		result, err := hook(false, net.ParseIP("127.0.0.1"), nil)
+		result, err := hook(false, net.ParseIP(goodIP), nil)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.False(t, result.Reject)
+		assert.Equal(t, 0, result.Code)
+	})
+
+	t.Run("Submission", func(t *testing.T) {
+		result, err := hook(true, net.ParseIP(badIP), nil)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.False(t, result.Reject)
