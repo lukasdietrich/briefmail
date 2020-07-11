@@ -1,3 +1,18 @@
+// Copyright (C) 2020  Lukas Dietrich <lukas@lukasdietrich.com>
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 // +build wireinject
 
 package main
@@ -18,13 +33,23 @@ var wireSet = wire.NewSet(
 	wire.Struct(new(startCommand), "*"),
 	wire.Struct(new(shellCommand), "*"),
 
-	storage.WireSet,
-	certs.WireSet,
-	hook.WireSet,
-	smtp.WireSet,
-	pop3.WireSet,
-	delivery.WireSet,
-	addressbook.WireSet,
+	certs.NewTLSConfig,
+
+	storage.NewDB,
+	storage.NewBlobs,
+	storage.NewCache,
+	storage.NewCleaner,
+
+	hook.FromHooks,
+	hook.DataHooks,
+
+	smtp.New,
+	pop3.New,
+
+	wire.Struct(new(delivery.Mailman), "*"),
+	wire.Struct(new(delivery.QueueWorker), "*"),
+
+	addressbook.Parse,
 )
 
 func newStartCommand() (*startCommand, error) {
