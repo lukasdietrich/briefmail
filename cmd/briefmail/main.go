@@ -16,6 +16,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -69,6 +70,7 @@ func main() {
 	case "start", "shell":
 		setupConfig(configFilename)
 		setupLogger()
+		printConfig()
 		runCommand(commandName)
 	default:
 		flag.Usage()
@@ -112,7 +114,7 @@ func setupLogger() {
 		logrus.Fatalf("unknown log level: %v", err)
 	}
 
-	logrus.Infof("setting log level to %v", logLevel)
+	logrus.Infof("setting log level to %q", logLevel)
 	logrus.SetLevel(logLevel)
 }
 
@@ -127,12 +129,10 @@ func setupConfig(filename string) {
 	} else {
 		logrus.Info("no config file provided. using environment only")
 	}
-
-	printConfig()
 }
 
 func readConfig(filename string) {
-	logrus.Infof("loading configuration from %v", filename)
+	logrus.Infof("loading configuration from %q", filename)
 	viper.SetConfigFile(filename)
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -149,6 +149,7 @@ func printConfig() {
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		logrus.Debugf("%s = %#v", key, viper.Get(key))
+		v, _ := json.Marshal(viper.Get(key))
+		logrus.Debugf("%s = %s", key, v)
 	}
 }

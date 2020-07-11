@@ -22,18 +22,21 @@
   # Enable blacklisting using "DNS Blacklists"
   # see <https://tools.ietf.org/html/rfc5782>
   enable     = true
-  servers    = [ "zen.spamhaus.org" ]
+  server     = "zen.spamhaus.org"
 
 [tls]
-  # Use standard pem encoded files to load the certificate
   source     = "files"
+
+  # Use standard pem encoded files to load the certificate
+[tls.files]
   crt        = "cert/briefmail.crt"
   key        = "cert/briefmail.key"
 
   # Extract a certificate from <https://traefik.io/>
   # source     = "traefik"
-  # acme       = "/etc/traefik/acme.json"
-  # domain     = "localhost"
+[tls.traefik]
+  acme       = "/etc/traefik/acme.json"
+  domain     = "localhost"
 
 [[smtp]]
   address    = ":25"
