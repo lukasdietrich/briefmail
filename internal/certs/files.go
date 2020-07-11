@@ -40,7 +40,7 @@ func newFilesCertSource() *filesCertSource {
 	}
 }
 
-func (s *filesCertSource) LastUpdate() (time.Time, error) {
+func (s *filesCertSource) lastUpdate() (time.Time, error) {
 	var updateTime time.Time
 
 	for _, file := range [...]string{s.crtFilename, s.keyFilename} {
@@ -57,7 +57,7 @@ func (s *filesCertSource) LastUpdate() (time.Time, error) {
 	return updateTime, nil
 }
 
-func (s *filesCertSource) Load() (*tls.Certificate, error) {
+func (s *filesCertSource) load() (*tls.Certificate, error) {
 	certificate, err := tls.LoadX509KeyPair(s.crtFilename, s.keyFilename)
 	if err != nil {
 		return nil, err

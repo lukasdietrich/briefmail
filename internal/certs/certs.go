@@ -31,31 +31,37 @@ const (
 	sourceTraefik = "traefik"
 )
 
-var log = logrus.WithField("prefix", "certs")
-
 func init() {
 	viper.SetDefault("tls.source", sourceNone)
 }
 
-type CertSource interface {
-	LastUpdate() (time.Time, error)
-	Load() (*tls.Certificate, error)
+type certSource interface {
+	lastUpdate() (time.Time, error)
+	load() (*tls.Certificate, error)
 }
 
-func NewCertSource() (CertSource, error) {
+func newCertSource() (certSource, error) {
 	switch source := viper.GetString("tls.source"); source {
 	case sourceNone:
-		return nil, nil
+		return noneCertSource{}, nil
 	case sourceFiles:
 		return newFilesCertSource(), nil
 	case sourceTraefik:
 		return newTraefikCertSource(), nil
 	default:
-		return nil, fmt.Errorf("unknown certificate source: %s", source)
+		return nil, fmt.Errorf("unknown certificate source %q", source)
 	}
 }
 
-func NewTlsConfig(source CertSource) *tls.Config {
+// NewTLSConfig creates a tls config, which can dynamically load certificates.
+// When the configured certificate source indicates an update, the new
+// certificate is loaded and returned.
+func NewTLSConfig() (*tls.Config, error) {
+	source, err := newCertSource()
+	if err != nil {
+		return nil, err
+	}
+
 	var (
 		lastCert *tls.Certificate
 		lastTime time.Time
@@ -67,26 +73,26 @@ func NewTlsConfig(source CertSource) *tls.Config {
 			lock.Lock()
 			defer lock.Unlock()
 
-			newTime, err := source.LastUpdate()
+			newTime, err := source.lastUpdate()
 			if err != nil {
-				log.Errorf("could not check for certificate updates: %v", err)
-				return nil, err
+				return nil, fmt.Errorf(
+					"could not check for certificate updates: %w", err)
 			}
 
 			if newTime.After(lastTime) {
-				newCert, err := source.Load()
+				newCert, err := source.load()
 				if err != nil {
-					log.Errorf("could not load certificate: %v", err)
-					return nil, err
+					return nil, fmt.Errorf(
+						"could not load certificate: %w", err)
 				}
 
 				lastTime = newTime
 				lastCert = newCert
 
-				log.Debugf("loaded certificate from %s", lastTime)
+				logrus.Debugf("new certificate loaded (updated %s)", newTime)
 			}
 
 			return lastCert, nil
 		},
-	}
+	}, nil
 }

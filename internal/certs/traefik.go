@@ -43,7 +43,7 @@ func newTraefikCertSource() *traefikCertSource {
 	}
 }
 
-func (s *traefikCertSource) LastUpdate() (time.Time, error) {
+func (s *traefikCertSource) lastUpdate() (time.Time, error) {
 	info, err := os.Stat(s.acmeFilename)
 	if err != nil {
 		return time.Time{}, err
@@ -52,7 +52,7 @@ func (s *traefikCertSource) LastUpdate() (time.Time, error) {
 	return info.ModTime(), nil
 }
 
-func (s *traefikCertSource) Load() (*tls.Certificate, error) {
+func (s *traefikCertSource) load() (*tls.Certificate, error) {
 	type Entries []struct {
 		Domain struct {
 			Main string `json:"main"`

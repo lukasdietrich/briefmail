@@ -16,9 +16,21 @@
 package certs
 
 import (
-	"github.com/google/wire"
+	"crypto/tls"
+	"errors"
+	"time"
 )
 
-var WireSet = wire.NewSet(
-	NewTLSConfig,
+var (
+	errCertSourceNone = errors.New("no certificate source is configured")
 )
+
+type noneCertSource struct{}
+
+func (noneCertSource) lastUpdate() (time.Time, error) {
+	return time.Time{}, errCertSourceNone
+}
+
+func (noneCertSource) load() (*tls.Certificate, error) {
+	return nil, errCertSourceNone
+}

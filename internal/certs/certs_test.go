@@ -16,9 +16,31 @@
 package certs
 
 import (
-	"github.com/google/wire"
+	"errors"
+	"testing"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-var WireSet = wire.NewSet(
-	NewTLSConfig,
-)
+func TestCertSourceUnknown(t *testing.T) {
+	viper.Set("tls.source", "unknown")
+
+	config, err := NewTLSConfig()
+	require.Error(t, err)
+	require.Nil(t, config)
+}
+
+func TestCertSourceNone(t *testing.T) {
+	viper.Set("tls.source", sourceNone)
+
+	config, err := NewTLSConfig()
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	cert, err := config.GetCertificate(nil)
+	assert.Error(t, err)
+	assert.Nil(t, cert)
+	assert.True(t, errors.Is(err, errCertSourceNone))
+}
