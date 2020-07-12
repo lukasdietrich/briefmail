@@ -17,6 +17,7 @@ package delivery
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/model"
@@ -30,14 +31,13 @@ type Mailman struct {
 	Queue       *QueueWorker
 }
 
-func (m *Mailman) Deliver(envelope *model.Envelope, mail model.Body) error {
-	offset := mail.Prepend("Return-Path", fmt.Sprintf("<%s>", envelope.From))
+func (m *Mailman) Deliver(envelope *model.Envelope, mail io.Reader) error {
 	id, size, err := m.Blobs.Write(mail)
 	if err != nil {
 		return err
 	}
 
-	if err := m.DB.AddMail(id, size, offset, envelope); err != nil {
+	if err := m.DB.AddMail(id, size, 0, envelope); err != nil {
 		m.Blobs.Delete(id)
 		return err
 	}

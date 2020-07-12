@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package smtp
 
 import (
 	"bytes"
@@ -39,15 +39,15 @@ func TestFold(t *testing.T) {
 		"This is important!",
 	}, "\r\n")
 
-	body := Body{Reader: strings.NewReader(msg)}
-	body.Prepend(
+	p := newPrepender(1)
+	p.prepend(
 		"Received",
 		"by very.good.mail.server (briefmail) "+
 			"for <a-very-important-person@very.good.mail.server>"+
 			"; Sat, 5 Jan 2019 06:33:36 +0000 (UTC)")
 
 	var actual bytes.Buffer
-	actual.ReadFrom(body)
+	actual.ReadFrom(p.reader(strings.NewReader(msg)))
 
 	assert.Equal(t, expected, actual.String())
 }

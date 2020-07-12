@@ -22,9 +22,9 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -123,7 +123,7 @@ func quit(db *storage.DB, blobs *storage.Blobs) handler {
 				"total":   len(s.mailbox.entries),
 			}).Debug("end of transaction")
 
-			mails := make([]model.ID, 0, len(s.mailbox.marks))
+			mails := make([]uuid.UUID, 0, len(s.mailbox.marks))
 
 			for n := range s.mailbox.marks {
 				mails = append(mails, s.mailbox.entries[int(n)].MailID)

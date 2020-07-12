@@ -13,18 +13,28 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package smtp
 
 import (
 	"bytes"
 	"io"
 )
 
-type Body struct {
-	io.Reader
+type prepender struct {
+	lines [][]byte
 }
 
-func (b *Body) Prepend(key, value string) int64 {
+func newPrepender(initialCapacity int) *prepender {
+	return &prepender{
+		lines: make([][]byte, 0, initialCapacity),
+	}
+}
+
+func (p *prepender) reset() {
+	p.lines = p.lines[:0]
+}
+
+func (p *prepender) prepend(key, value string) {
 	const (
 		// see RFC#2822 2.1.1
 		foldLength = 78
@@ -54,9 +64,16 @@ func (b *Body) Prepend(key, value string) int64 {
 		length = 0
 	}
 
-	b.Reader = io.MultiReader(&buffer, b.Reader)
+	p.lines = append(p.lines, buffer.Bytes())
+}
 
-	return int64(buffer.Len())
+func (p *prepender) reader(r io.Reader) io.Reader {
+	readers := make([]io.Reader, 0, len(p.lines)+1)
+	for _, line := range p.lines {
+		readers = append(readers, bytes.NewReader(line))
+	}
+
+	return io.MultiReader(append(readers, r)...)
 }
 
 func findFoldPoint(line string, length int) int {

@@ -307,16 +307,16 @@ func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks [
 			lr = &limitedReader{r, maxSize + 1024}
 		}
 
-		body := model.Body{Reader: lr}
-		body.Prepend("Received", fmt.Sprintf("from %s by (briefmail); %s",
+		prepender := newPrepender(8)
+		prepender.prepend("Received", fmt.Sprintf("from %s by (briefmail); %s",
 			s.envelope.From,
 			s.envelope.Date.Format(time.RFC1123Z)))
 
 		for _, header := range s.headers {
-			body.Prepend(header.Key, header.Value)
+			prepender.prepend(header.Key, header.Value)
 		}
 
-		entry, err := cache.Write(body)
+		entry, err := cache.Write(prepender.reader(lr))
 		if err != nil {
 			if err == errReaderLimitReached {
 				// discard remaining bytes (but not forever) to flush
@@ -359,12 +359,13 @@ func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks [
 			return err
 		}
 
-		body = model.Body{Reader: r}
+		prepender.reset()
+
 		for _, header := range headers {
-			body.Prepend(header.Key, header.Value)
+			prepender.prepend(header.Key, header.Value)
 		}
 
-		if err := mailman.Deliver(&s.envelope, body); err != nil {
+		if err := mailman.Deliver(&s.envelope, prepender.reader(r)); err != nil {
 			return err
 		}
 
