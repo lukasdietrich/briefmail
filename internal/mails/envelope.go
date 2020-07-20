@@ -29,7 +29,7 @@ type Envelope struct {
 	Addr net.IP
 	// Date is the time when the data transmission begins.
 	Date time.Time
-	// From is the email-address of te sender.
+	// From is the email-address of the sender.
 	From Address
 	// To is a list of recipient email-addresses.
 	To []Address
