@@ -13,16 +13,24 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package mails
 
 import (
+	"net"
 	"time"
 )
 
+// Envelope stores the information about an email before the actual content is
+// read. It is basically what a real envelope is to mail.
 type Envelope struct {
+	// Helo is the string provided by an smtp client when greeting the server.
 	Helo string
-	Addr string
+	// Addr is the remote address of the sender.
+	Addr net.IP
+	// Date is the time when the data transmission begins.
 	Date time.Time
-	From *Address
-	To   []*Address
+	// From is the email-address of te sender.
+	From Address
+	// To is a list of recipient email-addresses.
+	To []Address
 }

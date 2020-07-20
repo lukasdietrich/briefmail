@@ -19,7 +19,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -49,7 +48,7 @@ type Conn interface {
 	IsTLS() bool
 
 	// RemoteAddr returns the remote network address.
-	RemoteAddr() string
+	RemoteAddr() net.IP
 }
 
 type variableNetConn struct {
@@ -104,14 +103,21 @@ func (c *conn) IsTLS() bool {
 	return c.isTLS
 }
 
-func (c *conn) RemoteAddr() string {
-	remote := c.raw.RemoteAddr().String()
+func (c *conn) RemoteAddr() net.IP {
+	switch addr := c.raw.RemoteAddr().(type) {
+	case *net.TCPAddr:
+		return addr.IP
 
-	if remote == "pipe" {
-		// treat net/Pipe clients as localhost
-		// for testing purposes
-		return "127.0.0.1"
+	case *net.UDPAddr:
+		return addr.IP
+
+	default:
+		if addr.String() == "pipe" {
+			// treat net/Pipe clients as localhost
+			// for testing purposes
+			return net.ParseIP("127.0.0.1")
+		}
 	}
 
-	return remote[:strings.Index(remote, ":")]
+	return nil
 }

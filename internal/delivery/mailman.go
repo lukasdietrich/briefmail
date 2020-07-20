@@ -20,7 +20,7 @@ import (
 	"io"
 
 	"github.com/lukasdietrich/briefmail/internal/addressbook"
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -31,8 +31,8 @@ type Mailman struct {
 	Queue       *QueueWorker
 }
 
-func (m *Mailman) Deliver(envelope *model.Envelope, mail io.Reader) error {
-	id, size, err := m.Blobs.Write(mail)
+func (m *Mailman) Deliver(envelope mails.Envelope, content io.Reader) error {
+	id, size, err := m.Blobs.Write(content)
 	if err != nil {
 		return err
 	}
@@ -44,7 +44,7 @@ func (m *Mailman) Deliver(envelope *model.Envelope, mail io.Reader) error {
 
 	var (
 		mailboxes []int64
-		queue     []*model.Address
+		queue     []mails.Address
 	)
 
 	for _, addr := range envelope.To {

@@ -23,14 +23,13 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
@@ -109,7 +108,7 @@ func rset() handler {
 			s.state = sHelo
 		}
 
-		s.envelope.From = nil
+		s.envelope.From = mails.ZeroAddress
 		s.envelope.To = nil
 		s.headers = nil
 
@@ -157,7 +156,7 @@ func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) ha
 			return err
 		}
 
-		from, err := model.ParseAddress(arg)
+		from, err := mails.ParseAddress(arg)
 		if err != nil {
 			return err
 		}
@@ -198,13 +197,10 @@ func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) ha
 			}
 		}
 
-		var (
-			ip      = net.ParseIP(s.RemoteAddr())
-			headers []hook.HeaderField
-		)
+		var headers []hook.HeaderField
 
 		for _, hook := range hooks {
-			result, err := hook(s.isSubmission(), ip, from)
+			result, err := hook(s.isSubmission(), s.RemoteAddr(), from)
 			if err != nil {
 				return err
 			}
@@ -248,7 +244,7 @@ func rcpt(mailman delivery.Mailman, book addressbook.Addressbook) handler {
 			return err
 		}
 
-		to, err := model.ParseAddress(arg)
+		to, err := mails.ParseAddress(arg)
 		if err != nil {
 			return err
 		}
@@ -365,7 +361,7 @@ func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks [
 			prepender.prepend(header.Key, header.Value)
 		}
 
-		if err := mailman.Deliver(&s.envelope, prepender.reader(r)); err != nil {
+		if err := mailman.Deliver(s.envelope, prepender.reader(r)); err != nil {
 			return err
 		}
 

@@ -21,7 +21,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func init() {
@@ -44,7 +44,7 @@ type Result struct {
 	Text    string
 }
 
-type FromHook func(bool, net.IP, *model.Address) (*Result, error)
+type FromHook func(bool, net.IP, mails.Address) (*Result, error)
 type DataHook func(bool, io.Reader) (*Result, error)
 
 func FromHooks() []FromHook {

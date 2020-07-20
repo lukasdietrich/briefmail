@@ -26,7 +26,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
@@ -92,7 +92,7 @@ func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,
 		state: sInit,
-		envelope: model.Envelope{
+		envelope: mails.Envelope{
 			Addr: c.RemoteAddr(),
 		},
 	}
@@ -140,12 +140,12 @@ func (p *Proto) loop(s *session) error {
 					return err
 				}
 
-			case model.ErrInvalidAddressFormat:
+			case mails.ErrInvalidAddressFormat:
 				if err := s.send(&rInvalidAddress); err != nil {
 					return err
 				}
 
-			case model.ErrPathTooLong:
+			case mails.ErrPathTooLong:
 				if err := s.send(&rPathTooLong); err != nil {
 					return err
 				}

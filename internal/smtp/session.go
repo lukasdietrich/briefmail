@@ -18,7 +18,7 @@ package smtp
 import (
 	"time"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
@@ -55,7 +55,7 @@ type session struct {
 	textproto.Conn
 
 	state    sessionState
-	envelope model.Envelope
+	envelope mails.Envelope
 	headers  []hook.HeaderField
 	mailbox  *int64
 }

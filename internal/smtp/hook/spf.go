@@ -22,13 +22,13 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/zaccone/spf"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func makeSpfHook() FromHook {
 	logrus.Debug("hook: registering spf hook")
 
-	return func(submission bool, ip net.IP, from *model.Address) (*Result, error) {
+	return func(submission bool, ip net.IP, from mails.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil
 		}
@@ -39,7 +39,7 @@ func makeSpfHook() FromHook {
 			"from":   from,
 		})
 
-		result, _, err := spf.CheckHost(ip, from.Domain, from.String())
+		result, _, err := spf.CheckHost(ip, from.Domain(), from.String())
 		if err != nil {
 			log.Debug(err)
 		} else {
@@ -61,7 +61,7 @@ func makeSpfHook() FromHook {
 					Key: "Received-SPF",
 					Value: fmt.Sprintf(
 						"%s (with domain=%s of sender=%s) client-ip=%s;",
-						result, from.Domain, from.String(), ip),
+						result, from.Domain(), from.String(), ip),
 				},
 			},
 		}, nil

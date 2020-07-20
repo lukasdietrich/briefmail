@@ -13,45 +13,49 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package model
+package mails
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNilAddress(t *testing.T) {
+func TestEmptyAddress(t *testing.T) {
 	addr, err := ParseAddress("")
-	assert.Nil(t, err)
-	assert.Equal(t, NilAddress, addr)
+	assert.Equal(t, ErrInvalidAddressFormat, err)
+	assert.Zero(t, addr)
 }
 
-func TestAddress(t *testing.T) {
-	for raw, expected := range map[string]*Address{
-		"user1@host1": {User: "user1", Domain: "host1"},
-		"@example":    {User: "", Domain: "example"},
-		"someone@":    {User: "someone", Domain: ""},
-		"someone":     nil,
+func TestInvalidAddress(t *testing.T) {
+	addr, err := ParseAddress("no-at-sign")
+	assert.Equal(t, ErrInvalidAddressFormat, err)
+	assert.Zero(t, addr)
+}
 
-		fmt.Sprintf("%s@%s", longString(65), "example"):       nil,
-		fmt.Sprintf("@%s", longString(256)):                   nil,
-		fmt.Sprintf("%s@%s", longString(64), longString(255)): nil,
+func TestTooLongAddress(t *testing.T) {
+	for _, raw := range []string{
+		longString(200) + "@" + longString(200),
+		"@" + longString(256),
+		longString(65) + "@",
+		longString(64) + "@" + longString(192),
 	} {
-		t.Run(raw, func(t *testing.T) {
-			actual, err := ParseAddress(raw)
+		addr, err := ParseAddress(raw)
+		assert.Equal(t, ErrPathTooLong, err)
+		assert.Zero(t, addr)
+	}
+}
 
-			if expected != nil {
-				assert.Nil(t, err)
-				assert.Equal(t, expected.User, actual.User)
-				assert.Equal(t, expected.Domain, actual.Domain)
-				assert.Equal(t, raw, actual.String())
-			} else {
-				assert.Error(t, err)
-				assert.Nil(t, actual)
-			}
-		})
+func TestValidAddress(t *testing.T) {
+	for _, raw := range []string{
+		longString(64) + "@" + longString(100),
+		"@" + longString(255),
+		longString(10) + "@" + longString(245),
+	} {
+		addr, err := ParseAddress(raw)
+		assert.NoError(t, err)
+		assert.NotZero(t, addr)
+		assert.Equal(t, raw, addr.String())
 	}
 }
 

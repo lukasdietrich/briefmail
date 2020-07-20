@@ -23,14 +23,14 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func makeDnsblHook() FromHook {
 	server := viper.GetString("hook.dnsbl.server")
 	logrus.Debugf("hook: registering dnsbl hook (server=%s)", server)
 
-	return func(submission bool, ip net.IP, _ *model.Address) (*Result, error) {
+	return func(submission bool, ip net.IP, _ mails.Address) (*Result, error) {
 		if submission {
 			logrus.Debugf(
 				"skipping dnsbl for %q, because it is a submission", ip)

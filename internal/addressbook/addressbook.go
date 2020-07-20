@@ -18,8 +18,7 @@ package addressbook
 import (
 	"fmt"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
-	"github.com/lukasdietrich/briefmail/internal/normalize"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 type EntryKind int
@@ -34,7 +33,7 @@ type Entry struct {
 	Kind EntryKind
 
 	Mailbox *int64
-	Address *model.Address
+	Address mails.Address
 }
 
 func (e *Entry) String() string {
@@ -51,35 +50,35 @@ func (e *Entry) String() string {
 }
 
 type Addressbook interface {
-	Lookup(*model.Address) *Entry
+	Lookup(mails.Address) *Entry
 }
 
 type addressbook struct {
-	domains *normalize.Set
+	domains *Set
 	entries map[string]map[string]*Entry
 }
 
-func (b *addressbook) Lookup(addr *model.Address) *Entry {
-	if !b.domains.Contains(addr.Domain) {
+func (b *addressbook) Lookup(addr mails.Address) *Entry {
+	if !b.domains.Contains(addr.Domain()) {
 		return &Entry{
 			Kind:    Remote,
 			Address: addr,
 		}
 	}
 
-	if entry := lookupInDomain(b.entries[addr.Domain], addr); entry != nil {
+	if entry := lookupInDomain(b.entries[addr.Domain()], addr); entry != nil {
 		return entry
 	}
 
 	return lookupInDomain(b.entries["*"], addr)
 }
 
-func lookupInDomain(domain map[string]*Entry, addr *model.Address) *Entry {
+func lookupInDomain(domain map[string]*Entry, addr mails.Address) *Entry {
 	if domain == nil {
 		return nil
 	}
 
-	if entry := domain[addr.User]; entry != nil {
+	if entry := domain[addr.LocalPart()]; entry != nil {
 		return entry
 	}
 

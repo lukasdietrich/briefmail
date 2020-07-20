@@ -22,8 +22,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
-	"github.com/lukasdietrich/briefmail/internal/normalize"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -39,8 +38,8 @@ type fileFormat struct {
 	Mailboxes map[string][]string
 }
 
-func makeDomainSet() (*normalize.Set, error) {
-	return normalize.NewSet(viper.GetStringSlice("general.domains"), normalize.Domain)
+func makeDomainSet() (*Set, error) {
+	return NewSet(viper.GetStringSlice("general.domains"), mails.DomainToUnicode)
 }
 
 func Parse(db *storage.DB) (Addressbook, error) {
@@ -69,16 +68,16 @@ func Parse(db *storage.DB) (Addressbook, error) {
 		}
 
 		for _, address := range addresses {
-			addr, err := model.ParseAddress(address)
+			addr, err := mails.ParseAddress(address)
 			if err != nil {
 				return nil, err
 			}
 
-			if _, ok := addressbook.entries[addr.Domain]; !ok {
-				addressbook.entries[addr.Domain] = make(map[string]*Entry)
+			if _, ok := addressbook.entries[addr.Domain()]; !ok {
+				addressbook.entries[addr.Domain()] = make(map[string]*Entry)
 			}
 
-			addressbook.entries[addr.Domain][addr.User] = &Entry{
+			addressbook.entries[addr.Domain()][addr.LocalPart()] = &Entry{
 				Kind:    Local,
 				Mailbox: &mailbox,
 			}

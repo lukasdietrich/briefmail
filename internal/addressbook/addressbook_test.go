@@ -20,8 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
-	"github.com/lukasdietrich/briefmail/internal/normalize"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func TestSimple(t *testing.T) {
@@ -32,7 +31,7 @@ func TestSimple(t *testing.T) {
 		user2AtHost2 = makeEntry(3)
 	)
 
-	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
+	domains, err := NewSet([]string{"host1", "host2"}, mails.DomainToUnicode)
 	assert.Nil(t, err)
 
 	addressbook := addressbook{
@@ -75,7 +74,7 @@ func TestWildcard(t *testing.T) {
 		anyAtAny     = makeEntry(3)
 	)
 
-	domains, err := normalize.NewSet([]string{"host1", "host2"}, normalize.Domain)
+	domains, err := NewSet([]string{"host1", "host2"}, mails.DomainToUnicode)
 	assert.Nil(t, err)
 
 	addressbook := addressbook{
@@ -105,8 +104,8 @@ func TestWildcard(t *testing.T) {
 	}
 }
 
-func mustAddress(raw string) *model.Address {
-	addr, err := model.ParseAddress(raw)
+func mustAddress(raw string) mails.Address {
+	addr, err := mails.ParseAddress(raw)
 	if err != nil {
 		panic(err)
 	}

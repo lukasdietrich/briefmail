@@ -26,7 +26,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func init() {
@@ -202,7 +202,7 @@ func (d *DB) Authenticate(name, pass string) (int64, bool, error) {
 type Mail struct {
 	ID     uuid.UUID
 	Date   time.Time
-	From   *model.Address
+	From   mails.Address
 	Size   int64
 	Offset int64
 }
@@ -229,7 +229,7 @@ func (d *DB) Mail(id uuid.UUID) (*Mail, error) {
 	})
 }
 
-func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope *model.Envelope) error {
+func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope mails.Envelope) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
@@ -342,7 +342,7 @@ type QueueElement struct {
 	MailID   uuid.UUID
 	Date     time.Time
 	Attempts int
-	To       []*model.Address
+	To       []mails.Address
 }
 
 func (d *DB) PeekQueue() (*QueueElement, error) {
@@ -370,7 +370,7 @@ func (d *DB) PeekQueue() (*QueueElement, error) {
 	})
 }
 
-func (d *DB) AddToQueue(mail uuid.UUID, to []*model.Address) error {
+func (d *DB) AddToQueue(mail uuid.UUID, to []mails.Address) error {
 	_to, err := json.Marshal(to)
 	if err != nil {
 		return err
@@ -389,7 +389,7 @@ func (d *DB) AddToQueue(mail uuid.UUID, to []*model.Address) error {
 	})
 }
 
-func (d *DB) UpdateQueue(mail uuid.UUID, to []*model.Address, date time.Time) error {
+func (d *DB) UpdateQueue(mail uuid.UUID, to []mails.Address, date time.Time) error {
 	_to, err := json.Marshal(to)
 	if err != nil {
 		return err

@@ -30,7 +30,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/model"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -131,9 +131,9 @@ func (q *QueueWorker) do(elem *storage.QueueElement) {
 	}
 
 	var (
-		delivered     []*model.Address
-		undeliverable []*model.Address
-		pending       []*model.Address
+		delivered     []mails.Address
+		undeliverable []mails.Address
+		pending       []mails.Address
 	)
 
 	for domain, addresses := range addressesByDomain(elem.To) {
@@ -211,11 +211,11 @@ func scheduleAttempt(attempt int) (bool, time.Time) {
 	return false, now
 }
 
-func addressesByDomain(addresses []*model.Address) map[string][]*model.Address {
-	domains := make(map[string][]*model.Address)
+func addressesByDomain(addresses []mails.Address) map[string][]mails.Address {
+	domains := make(map[string][]mails.Address)
 
 	for _, addr := range addresses {
-		domains[addr.Domain] = append(domains[addr.Domain], addr)
+		domains[addr.Domain()] = append(domains[addr.Domain()], addr)
 	}
 
 	return domains
@@ -225,9 +225,9 @@ type client struct {
 	conn   net.Conn
 	client *smtp.Client
 
-	delivered     []*model.Address
-	undeliverable []*model.Address
-	pending       []*model.Address
+	delivered     []mails.Address
+	undeliverable []mails.Address
+	pending       []mails.Address
 }
 
 func (c *client) close() {
@@ -268,7 +268,7 @@ func (c *client) connect(domain string) error {
 	return errCouldNotConnect
 }
 
-func (c *client) send(r io.Reader, hostname string, from *model.Address, to []*model.Address) error {
+func (c *client) send(r io.Reader, hostname string, from mails.Address, to []mails.Address) error {
 	if err := c.client.Hello(hostname); err != nil {
 		return err
 	}
