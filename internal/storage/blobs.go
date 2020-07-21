@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
@@ -50,41 +49,52 @@ func NewBlobs() (*Blobs, error) {
 }
 
 // Write copies all the data from r to a blob, that is addressable by the
-// returned uuid.
-func (b *Blobs) Write(r io.Reader) (uuid.UUID, int64, error) {
-	id, err := uuid.NewRandom()
+// returned id.
+func (b *Blobs) Write(r io.Reader) (string, int64, error) {
+	id, err := newRandomID()
 	if err != nil {
-		return uuid.Nil, -1, err
+		return id, -1, err
 	}
 
-	f, err := b.fs.Create(id.String())
+	f, err := b.fs.Create(id)
 	if err != nil {
-		return uuid.Nil, -1, err
+		return id, -1, err
 	}
 
-	logrus.Debugf("writing blob %s", id)
+	logrus.Debugf("writing blob %q", id)
 
 	size, err := io.Copy(f, r)
 	if err != nil {
-		f.Close()
-		b.Delete(id)
+		logrus.Infof("could not write to blob file %q", id)
 
-		return uuid.Nil, -1, err
+		if err := f.Close(); err != nil {
+			logrus.Warnf("could not close partial blob file %q: %v", id, err)
+		}
+
+		if err := b.fs.Remove(id); err != nil {
+			logrus.Warnf("could not remove partial blob file %q: %v", id, err)
+		}
+
+		return id, -1, err
 	}
 
 	return id, size, f.Close()
 }
 
 // Delete removes a blob by id.
-func (b *Blobs) Delete(id uuid.UUID) error {
-	logrus.Debugf("removing blob %s", id)
-	return b.fs.Remove(id.String())
+func (b *Blobs) Delete(id string) error {
+	logrus.Debugf("removing blob %q", id)
+	return b.fs.Remove(id)
 }
 
 // OffsetReader returns a reader to a blob with an initial offset to be skipped.
 // The responsibiltiy to close the reader is on the caller.
-func (b *Blobs) OffsetReader(id uuid.UUID, offset int64) (io.ReadCloser, error) {
-	f, err := b.fs.Open(id.String())
+func (b *Blobs) OffsetReader(id string, offset int64) (io.ReadCloser, error) {
+	if id == "" {
+		return nil, os.ErrInvalid
+	}
+
+	f, err := b.fs.Open(id)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +107,6 @@ func (b *Blobs) OffsetReader(id uuid.UUID, offset int64) (io.ReadCloser, error) 
 }
 
 // Reader is a shorthand for OffsetReader(id, 0)
-func (b *Blobs) Reader(id uuid.UUID) (io.ReadCloser, error) {
+func (b *Blobs) Reader(id string) (io.ReadCloser, error) {
 	return b.OffsetReader(id, 0)
 }

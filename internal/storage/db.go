@@ -22,7 +22,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/viper"
 
@@ -200,14 +199,14 @@ func (d *DB) Authenticate(name, pass string) (int64, bool, error) {
 }
 
 type Mail struct {
-	ID     uuid.UUID
+	ID     string
 	Date   time.Time
 	From   mails.Address
 	Size   int64
 	Offset int64
 }
 
-func (d *DB) Mail(id uuid.UUID) (*Mail, error) {
+func (d *DB) Mail(id string) (*Mail, error) {
 	var m Mail
 
 	return &m, d.do(func(tx *sql.Tx) error {
@@ -229,7 +228,7 @@ func (d *DB) Mail(id uuid.UUID) (*Mail, error) {
 	})
 }
 
-func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope mails.Envelope) error {
+func (d *DB) AddMail(id string, size, offset int64, envelope mails.Envelope) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
@@ -244,7 +243,7 @@ func (d *DB) AddMail(id uuid.UUID, size, offset int64, envelope mails.Envelope) 
 }
 
 type Entry struct {
-	MailID uuid.UUID
+	MailID string
 	Size   int64
 }
 
@@ -287,7 +286,7 @@ func (d *DB) Entries(mailbox int64) ([]Entry, int64, error) {
 	})
 }
 
-func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
+func (d *DB) AddEntries(mail string, mailboxes []int64) error {
 	return d.do(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(
 			`
@@ -313,7 +312,7 @@ func (d *DB) AddEntries(mail uuid.UUID, mailboxes []int64) error {
 	})
 }
 
-func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
+func (d *DB) DeleteEntries(mails []string, mailbox int64) error {
 	return d.do(func(tx *sql.Tx) error {
 		stmt, err := tx.Prepare(
 			`
@@ -339,7 +338,7 @@ func (d *DB) DeleteEntries(mails []uuid.UUID, mailbox int64) error {
 }
 
 type QueueElement struct {
-	MailID   uuid.UUID
+	MailID   string
 	Date     time.Time
 	Attempts int
 	To       []mails.Address
@@ -370,7 +369,7 @@ func (d *DB) PeekQueue() (*QueueElement, error) {
 	})
 }
 
-func (d *DB) AddToQueue(mail uuid.UUID, to []mails.Address) error {
+func (d *DB) AddToQueue(mail string, to []mails.Address) error {
 	_to, err := json.Marshal(to)
 	if err != nil {
 		return err
@@ -389,7 +388,7 @@ func (d *DB) AddToQueue(mail uuid.UUID, to []mails.Address) error {
 	})
 }
 
-func (d *DB) UpdateQueue(mail uuid.UUID, to []mails.Address, date time.Time) error {
+func (d *DB) UpdateQueue(mail string, to []mails.Address, date time.Time) error {
 	_to, err := json.Marshal(to)
 	if err != nil {
 		return err
@@ -409,7 +408,7 @@ func (d *DB) UpdateQueue(mail uuid.UUID, to []mails.Address, date time.Time) err
 	})
 }
 
-func (d *DB) DeleteFromQueue(mail uuid.UUID) error {
+func (d *DB) DeleteFromQueue(mail string) error {
 	return d.do(func(tx *sql.Tx) error {
 		_, err := tx.Exec(
 			`
@@ -421,8 +420,8 @@ func (d *DB) DeleteFromQueue(mail uuid.UUID) error {
 	})
 }
 
-func (d *DB) DeleteOrphans() ([]uuid.UUID, error) {
-	var orphans []uuid.UUID
+func (d *DB) DeleteOrphans() ([]string, error) {
+	var orphans []string
 
 	return orphans, d.do(func(tx *sql.Tx) error {
 		rows, err := tx.Query(
@@ -447,7 +446,7 @@ func (d *DB) DeleteOrphans() ([]uuid.UUID, error) {
 
 		defer rows.Close()
 
-		var orphan uuid.UUID
+		var orphan string
 
 		for rows.Next() {
 			if err := rows.Scan(&orphan); err != nil {

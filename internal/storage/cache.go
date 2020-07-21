@@ -20,7 +20,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
@@ -71,26 +70,40 @@ func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 		return &CacheEntry{memory: memory}, nil
 	}
 
-	file, err := b.fs.Create(uuid.New().String())
+	id, err := newRandomID()
 	if err != nil {
 		return nil, err
 	}
 
-	logrus.Debugf("cache entry exceeding %d, evading to temporary file %s",
-		b.memoryLimit, file.Name())
-
-	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
-		file.Close()
-		b.fs.Remove(file.Name())
+	file, err := b.fs.Create(id)
+	if err != nil {
 		return nil, err
 	}
 
-	return &CacheEntry{file: file, fs: b.fs}, nil
+	logrus.Debugf("cache entry exceeding %d bytes, evading to file %q",
+		b.memoryLimit, id)
+
+	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
+		logrus.Infof("could not write to cache file %q", id)
+
+		if err := file.Close(); err != nil {
+			logrus.Warnf("could not close partial cache file %q: %v", id, err)
+		}
+
+		if err := b.fs.Remove(id); err != nil {
+			logrus.Warnf("could not remove partial cache file %q: %v", id, err)
+		}
+
+		return nil, err
+	}
+
+	return &CacheEntry{id: id, file: file, fs: b.fs}, nil
 }
 
 // CacheEntry is a single blob of data kept in temporary storage.
 type CacheEntry struct {
 	memory *bytes.Buffer
+	id     string
 	file   afero.File
 	fs     afero.Fs
 }
@@ -99,13 +112,13 @@ type CacheEntry struct {
 // cache entry is smaller than the memory limit, this is a noop.
 func (e *CacheEntry) Release() error {
 	if e.file != nil {
-		logrus.Debugf("removing cache file %s", e.file.Name())
+		logrus.Debugf("removing cache file %q", e.id)
 
 		if err := e.file.Close(); err != nil {
 			return err
 		}
 
-		return e.fs.Remove(e.file.Name())
+		return e.fs.Remove(e.id)
 	}
 
 	return nil

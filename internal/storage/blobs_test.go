@@ -21,7 +21,6 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 )
@@ -31,7 +30,7 @@ func TestBlobs(t *testing.T) {
 		blobs = Blobs{fs: afero.NewMemMapFs()}
 		data  = make([]byte, 2<<16)
 
-		id uuid.UUID
+		id string
 	)
 
 	rand.Seed(23980234)
@@ -40,7 +39,7 @@ func TestBlobs(t *testing.T) {
 	assert.Equal(t, len(data), n)
 
 	t.Run("ReadNil", func(t *testing.T) {
-		_, err := blobs.Reader(uuid.Nil)
+		_, err := blobs.Reader("")
 		assert.Error(t, err)
 	})
 
@@ -48,7 +47,7 @@ func TestBlobs(t *testing.T) {
 		var n int64
 		id, n, err = blobs.Write(bytes.NewReader(data))
 		assert.NoError(t, err)
-		assert.NotEqual(t, uuid.Nil, id)
+		assert.NotEqual(t, "", id)
 		assert.EqualValues(t, len(data), n)
 	})
 
