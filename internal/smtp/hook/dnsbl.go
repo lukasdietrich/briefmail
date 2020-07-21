@@ -38,7 +38,7 @@ func makeDnsblHook() FromHook {
 		}
 
 		host := formatReverseIP(ip) + server
-		logrus.Debugf("looking up dnsbl for %q", host)
+		logrus.Debugf("looking up dnsbl for %q on %q", ip, host)
 
 		records, err := net.LookupIP(host)
 		if err != nil {
@@ -58,7 +58,7 @@ func makeDnsblHook() FromHook {
 			}, nil
 		}
 
-		logrus.Debugf("%q is not blacklisted", ip)
+		logrus.Infof("%q is not blacklisted", ip)
 		return &Result{}, nil
 	}
 }

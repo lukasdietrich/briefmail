@@ -33,17 +33,13 @@ func makeSpfHook() FromHook {
 			return &Result{}, nil
 		}
 
-		log := logrus.WithFields(logrus.Fields{
-			"prefix": "spf",
-			"ip":     ip,
-			"from":   from,
-		})
+		logrus.Debugf("looking up spf for %q", from)
 
 		result, _, err := spf.CheckHost(ip, from.Domain(), from.String())
 		if err != nil {
-			log.Debug(err)
+			logrus.Errorf("could not check spf for %q: %v", from, err)
 		} else {
-			log.Debug(result)
+			logrus.Infof("spf result for %q: %q", from, result)
 		}
 
 		if result == spf.Fail {
