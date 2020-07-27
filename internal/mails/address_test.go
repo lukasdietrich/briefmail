@@ -67,3 +67,32 @@ func longString(n int) string {
 
 	return string(r)
 }
+
+func TestDomainToASCII(t *testing.T) {
+	for domain, expected := range map[string]string{
+		"example.com":     "example.com",
+		"dömäin.example":  "xn--dmin-moa0i.example",
+		"DÖMÄIN.example":  "xn--dmin-moa0i.example",
+		"äaaa.example":    "xn--aaa-pla.example",
+		"déjà.vu.example": "xn--dj-kia8a.vu.example",
+		"fußball.example": "fussball.example",
+	} {
+		actual, err := DomainToASCII(domain)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
+	}
+}
+
+func TestDomainToUnicode(t *testing.T) {
+	for domain, expected := range map[string]string{
+		"example.com":             "example.com",
+		"xn--dmin-moa0i.example":  "dömäin.example",
+		"xn--aaa-pla.example":     "äaaa.example",
+		"xn--dj-kia8a.vu.example": "déjà.vu.example",
+		"fussball.example":        "fussball.example",
+	} {
+		actual, err := DomainToUnicode(domain)
+		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
+	}
+}
