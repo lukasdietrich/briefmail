@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/idna"
+	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -43,10 +44,25 @@ type Address struct {
 	at  int
 }
 
-// ParseWithNormalizedDomain calls ParseAddress and transforms the domain part
-// of the address using DomainToUnicode.
-func ParseWithNormalizedDomain(raw string) (Address, error) {
-	addr, err := ParseAddress(raw)
+// ParseNormalized calls ParseUnicode and transforms the local-part using NormalizeLocalPart.
+func ParseNormalized(raw string) (Address, error) {
+	addr, err := ParseUnicode(raw)
+	if err != nil {
+		return addr, err
+	}
+
+	localPart := NormalizeLocalPart(addr.LocalPart())
+	if localPart != addr.LocalPart() {
+		addr.raw = localPart + "@" + addr.Domain()
+		addr.at = len(localPart)
+	}
+
+	return addr, nil
+}
+
+// ParseUnicode calls Parse and transforms the domain part of the address using DomainToUnicode.
+func ParseUnicode(raw string) (Address, error) {
+	addr, err := Parse(raw)
 	if err != nil {
 		return addr, err
 	}
@@ -56,12 +72,15 @@ func ParseWithNormalizedDomain(raw string) (Address, error) {
 		return addr, err
 	}
 
-	addr.raw = addr.LocalPart() + "@" + domain
+	if domain != addr.Domain() {
+		addr.raw = addr.LocalPart() + "@" + domain
+	}
+
 	return addr, nil
 }
 
-// ParseAddress splits an address at the "@" sign and checks for size limits.
-func ParseAddress(raw string) (Address, error) {
+// Parse splits an address at the "@" sign and checks for size limits.
+func Parse(raw string) (Address, error) {
 	if len(raw) == 0 {
 		return ZeroAddress, ErrInvalidAddressFormat
 	}
@@ -101,7 +120,7 @@ func (a *Address) Scan(src interface{}) error {
 		return err
 	}
 
-	v, err := ParseAddress(s.(string))
+	v, err := Parse(s.(string))
 	if err != nil {
 		return err
 	}
@@ -134,4 +153,25 @@ func DomainToASCII(domain string) (string, error) {
 	}
 
 	return idna.Lookup.ToASCII(mapped)
+}
+
+// fold is a cases.Caser to fold unicode text. Folding is more or less "compatible" lowercase.
+var fold = cases.Fold()
+
+// NormalizeLocalPart applie several rules to make the local-part of addresses comparable. This may
+// only be applied to local addresses. Outbound addresses may not be altered.
+//
+// 1) The local-part is case-folded so that "user" and "USER" are considered equal.
+// 2) The local-part is normalized using NFKC so that equal looking runes are considered equal.
+// 3) The local-part has the suffix trimmed. A suffix is everything after the first '+' rune.
+func NormalizeLocalPart(localPart string) string {
+	folded := fold.String(localPart)
+	normalized := norm.NFKC.String(folded)
+
+	suffixIndex := strings.IndexRune(normalized, '+')
+	if suffixIndex < 0 {
+		return normalized
+	}
+
+	return normalized[:suffixIndex]
 }

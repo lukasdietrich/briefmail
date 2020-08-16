@@ -22,13 +22,13 @@ import (
 )
 
 func TestEmptyAddress(t *testing.T) {
-	addr, err := ParseAddress("")
+	addr, err := Parse("")
 	assert.Equal(t, ErrInvalidAddressFormat, err)
 	assert.Zero(t, addr)
 }
 
 func TestInvalidAddress(t *testing.T) {
-	addr, err := ParseAddress("no-at-sign")
+	addr, err := Parse("no-at-sign")
 	assert.Equal(t, ErrInvalidAddressFormat, err)
 	assert.Zero(t, addr)
 }
@@ -40,7 +40,7 @@ func TestTooLongAddress(t *testing.T) {
 		longString(65) + "@",
 		longString(64) + "@" + longString(192),
 	} {
-		addr, err := ParseAddress(raw)
+		addr, err := Parse(raw)
 		assert.Equal(t, ErrPathTooLong, err)
 		assert.Zero(t, addr)
 	}
@@ -52,7 +52,7 @@ func TestValidAddress(t *testing.T) {
 		"@" + longString(255),
 		longString(10) + "@" + longString(245),
 	} {
-		addr, err := ParseAddress(raw)
+		addr, err := Parse(raw)
 		assert.NoError(t, err)
 		assert.NotZero(t, addr)
 		assert.Equal(t, raw, addr.String())
@@ -93,6 +93,18 @@ func TestDomainToUnicode(t *testing.T) {
 	} {
 		actual, err := DomainToUnicode(domain)
 		assert.NoError(t, err)
+		assert.Equal(t, expected, actual)
+	}
+}
+
+func TestNormalizeLocalPart(t *testing.T) {
+	for localPart, expected := range map[string]string{
+		"user+suffix":                    "user",
+		"fußball":                        "fussball",
+		"ÄÖÜ":                            "äöü",
+		"\u0041\u030A+and+a+long+suffix": "\u00e5",
+	} {
+		actual := NormalizeLocalPart(localPart)
 		assert.Equal(t, expected, actual)
 	}
 }
