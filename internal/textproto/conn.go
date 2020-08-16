@@ -16,6 +16,7 @@
 package textproto
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"net"
@@ -49,6 +50,9 @@ type Conn interface {
 
 	// RemoteAddr returns the remote network address.
 	RemoteAddr() net.IP
+
+	// Context returns the connection context.
+	Context() context.Context
 }
 
 type variableNetConn struct {
@@ -120,4 +124,8 @@ func (c *conn) RemoteAddr() net.IP {
 	}
 
 	return nil
+}
+
+func (c *conn) Context() context.Context {
+	return context.TODO()
 }

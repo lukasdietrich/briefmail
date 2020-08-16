@@ -27,7 +27,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
@@ -139,7 +138,7 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
+func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
 	var (
 		rOk   = reply{250, "noted."}
 		rSize = reply{552, "bit too much"}
@@ -156,29 +155,27 @@ func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) ha
 			return err
 		}
 
-		from, err := mails.ParseAddress(arg)
+		from, err := mails.ParseUnicode(arg)
 		if err != nil {
 			return err
 		}
 
-		entry := book.Lookup(from)
+		origin, err := addressbook.Lookup(s.Context(), from)
+		if err != nil {
+			return err
+		}
 
 		if s.isSubmission() {
-			// authenticated connections must send
-			// mails from a local address, which
-			// the current user owns
+			// authenticated connections must send mails from a local address,
+			// which the current user owns
 
-			if entry == nil ||
-				entry.Kind != addressbook.Local ||
-				*entry.Mailbox != *s.mailbox {
+			if !origin.IsLocal || origin.Mailbox.ID != s.mailbox.ID {
 				return s.send(&rAuth)
 			}
 		} else {
-			// unauthenticated connections must send
-			// mails from a remote address
+			// unauthenticated connections must send mails from a remote address
 
-			if entry == nil ||
-				entry.Kind == addressbook.Local {
+			if origin.IsLocal {
 				return s.send(&rAuth)
 			}
 		}
@@ -223,7 +220,7 @@ func mail(book addressbook.Addressbook, maxSize int64, hooks []hook.FromHook) ha
 // `RCPT` command as specified in RFC#5321 4.1.1.3
 //
 //     "RCPT TO:<" <Forward-path> ">" [ SP Parameters ] CRLF
-func rcpt(mailman delivery.Mailman, book addressbook.Addressbook) handler {
+func rcpt(addressbook *delivery.Addressbook) handler {
 	var (
 		rOk                = reply{250, "yup, another?"}
 		rTooManyRecipients = reply{452, "that is quite a crowd already!"}
@@ -244,20 +241,17 @@ func rcpt(mailman delivery.Mailman, book addressbook.Addressbook) handler {
 			return err
 		}
 
-		to, err := mails.ParseAddress(arg)
+		to, err := mails.ParseUnicode(arg)
 		if err != nil {
 			return err
 		}
 
-		entry := book.Lookup(to)
-
-		if entry == nil {
-			// no entry found
-			return s.send(&rInvalidRecipient)
+		destination, err := addressbook.Lookup(s.Context(), to)
+		if err != nil {
+			return err
 		}
 
-		if !s.isSubmission() && entry.Kind == addressbook.Remote {
-			// attempt to relay
+		if (s.isSubmission() && !destination.IsLocal) || destination.Mailbox == nil {
 			return s.send(&rInvalidRecipient)
 		}
 
@@ -271,7 +265,7 @@ func rcpt(mailman delivery.Mailman, book addressbook.Addressbook) handler {
 // `DATA` command as specified in RFC#5321 4.1.1.4
 //
 //     "DATA" CRLF
-func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
+func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
 	var (
 		rData = reply{354, "go ahead. period."}
 		rOk   = reply{250, "confirmed transfer."}
@@ -361,7 +355,9 @@ func data(mailman delivery.Mailman, cache *storage.Cache, maxSize int64, hooks [
 			prepender.prepend(header.Key, header.Value)
 		}
 
-		if err := mailman.Deliver(s.envelope, prepender.reader(r)); err != nil {
+		content := prepender.reader(r)
+
+		if err := mailman.Deliver(s.Context(), s.envelope, content); err != nil {
 			return err
 		}
 
@@ -403,7 +399,7 @@ func starttls(config *tls.Config) handler {
 // `AUTH` command as specified in RFC#4954
 //
 //     "AUTH" <Mechanism> [ Payload ] CRLF
-func auth(db *storage.DB) handler {
+func auth(authenticator *delivery.Authenticator) handler {
 	var (
 		rUsername = reply{334, "VXNlcm5hbWU6"}
 		rPassword = reply{334, "UGFzc3dvcmQ6"}
@@ -419,7 +415,7 @@ func auth(db *storage.DB) handler {
 		var (
 			fields = bytes.Fields(c.tail)
 			name   string
-			pass   string
+			pass   []byte
 		)
 
 		if len(fields) < 1 {
@@ -449,7 +445,7 @@ func auth(db *storage.DB) handler {
 			}
 
 			name = string(fields[1])
-			pass = string(fields[2])
+			pass = fields[2]
 
 		case "LOGIN":
 			if err := s.send(&rUsername); err != nil {
@@ -477,27 +473,30 @@ func auth(db *storage.DB) handler {
 				return err
 			}
 
-			b, err = base64.StdEncoding.DecodeString(string(b))
+			pass, err = base64.StdEncoding.DecodeString(string(b))
 			if err != nil {
 				return errCommandSyntax
 			}
-
-			pass = string(b)
 
 		default:
 			return errCommandSyntax
 		}
 
-		mailbox, ok, err := db.Authenticate(name, pass)
+		addr, err := mails.ParseUnicode(name)
 		if err != nil {
 			return err
 		}
 
-		if ok {
-			s.mailbox = &mailbox
-			return s.send(&rOk)
+		mailbox, err := authenticator.Auth(s.Context(), addr, pass)
+		if err != nil {
+			if errors.Is(err, delivery.ErrWrongAddressPassword) {
+				return s.send(&rFail)
+			}
+
+			return err
 		}
 
-		return s.send(&rFail)
+		s.mailbox = mailbox
+		return s.send(&rOk)
 	}
 }

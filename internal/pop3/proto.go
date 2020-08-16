@@ -23,6 +23,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
@@ -36,7 +37,8 @@ type Proto struct {
 
 // New creates a new Protocol instance to be used with a textproto Server
 func New(
-	db *storage.DB,
+	authenticator *delivery.Authenticator,
+	inboxer *delivery.Inboxer,
 	blobs *storage.Blobs,
 	tlsConfig *tls.Config,
 ) *Proto {
@@ -50,17 +52,17 @@ func New(
 				"UIDL"),
 
 			"USER": user(),
-			"PASS": pass(locks, db),
+			"PASS": pass(locks, authenticator, inboxer),
 
 			"STAT": stat(),
 			"LIST": list(),
 			"UIDL": uidl(),
-			"RETR": retr(blobs),
+			"RETR": retr(inboxer, blobs),
 			"DELE": dele(),
 
 			"NOOP": noop(),
 			"RSET": rset(),
-			"QUIT": quit(db, blobs),
+			"QUIT": quit(inboxer),
 
 			"STLS": stls(tlsConfig),
 		},
@@ -101,7 +103,7 @@ func (p *Proto) Handle(c textproto.Conn) {
 	}
 
 	if s.state == sTransaction {
-		p.locks.unlock(s.mailbox.id)
+		p.locks.unlock(s.mailbox.ID)
 	}
 }
 

@@ -2,9 +2,6 @@
   # The local hostname which is used to greet incoming requests
   hostname   = "localhost"
 
-  # A list of domains this server is accepting mails for
-  domains    = [ "localhost" ]
-
 [addressbook]
   filename = "_example/addressbook.toml"
 

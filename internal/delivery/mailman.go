@@ -16,71 +16,116 @@
 package delivery
 
 import (
+	"context"
 	"fmt"
 	"io"
 
-	"github.com/lukasdietrich/briefmail/internal/addressbook"
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
 
+// Mailman is handles the delivery of local mails into mailboxes as well as
+// queuing outbound delivery.
 type Mailman struct {
-	DB          *storage.DB
-	Blobs       *storage.Blobs
-	Addressbook addressbook.Addressbook
-	Queue       *QueueWorker
+	database    *storage.Database
+	blobs       *storage.Blobs
+	addressbook *Addressbook
 }
 
-func (m *Mailman) Deliver(envelope mails.Envelope, content io.Reader) error {
-	id, size, err := m.Blobs.Write(content)
+// NewMailman creates a new mailman for delivery.
+func NewMailman(
+	database *storage.Database,
+	blobs *storage.Blobs,
+	addressbook *Addressbook,
+) *Mailman {
+	return &Mailman{
+		database:    database,
+		blobs:       blobs,
+		addressbook: addressbook,
+	}
+}
+
+// Deliver goes through the list of recipients and determines if they are local
+// or outbound. Local mails are put into the corresponding mailboxes. Outbound
+// mails are queued for delivery. Because of the queue errors during outbound
+// delivery are not known at this point.
+func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content io.Reader) error {
+	id, size, err := m.blobs.Write(content)
 	if err != nil {
 		return err
 	}
 
-	if err := m.DB.AddMail(id, size, 0, envelope); err != nil {
-		m.Blobs.Delete(id)
+	tx, err := m.database.BeginTx(ctx)
+	if err != nil {
 		return err
 	}
 
-	var (
-		mailboxes []int64
-		queue     []mails.Address
-	)
+	defer tx.RollbackWith(m.rollback(id))
 
-	for _, addr := range envelope.To {
-		entry := m.Addressbook.Lookup(addr)
-		if entry == nil {
-			return fmt.Errorf("could not deliver to %s", addr)
-		}
+	mail := storage.Mail{
+		ID:         id,
+		ReceivedAt: envelope.Date.Unix(),
+		ReturnPath: envelope.From.String(),
+		Size:       size,
+	}
 
-		switch entry.Kind {
-		case addressbook.Local:
-			mailboxes = append(mailboxes, *entry.Mailbox)
+	logrus.Infof("delivering %q to %d recipients", id, len(envelope.To))
 
-		case addressbook.Forward, addressbook.Remote:
-			queue = append(queue, entry.Address)
+	if err := queries.InsertMail(tx, &mail); err != nil {
+		return err
+	}
+
+	for _, to := range envelope.To {
+		if err := m.deliverToRecipient(tx, to, &mail); err != nil {
+			return err
 		}
 	}
 
-	log := log.WithField("mail", id)
+	return tx.Commit()
+}
 
-	if len(mailboxes) > 0 {
-		if err := m.DB.AddEntries(id, mailboxes); err != nil {
-			return err
+// rollback is used to rollback the transaction of Deliver as well as to cleanup
+// the mail blob, if an error occurs during delivery. Further errors happening
+// inside of rollback are logged but not handled, because we do not want to
+// shadow the original cause of the rollback.
+func (m *Mailman) rollback(id string) func() {
+	return func() {
+		logrus.Info("an error occured during delivery, rolling back")
+
+		if err := m.blobs.Delete(id); err != nil {
+			logrus.Warnf("could not delete blob %q", id)
 		}
+	}
+}
 
-		log.WithField("mailboxes", mailboxes).
-			Debug("mail delivered to local mailboxes")
+// deliverToRecipient determines if a recipient is local or not and acts
+// accordingly. If local delivery fails because of a unique constraint, no
+// error is returned. This can only occur when multiple addresses point to the
+// same mailbox, in which case we just avoid duplicate entries.
+func (m *Mailman) deliverToRecipient(tx *storage.Tx, to mails.Address, mail *storage.Mail) error {
+	result, err := m.addressbook.LookupTx(tx, to)
+	if err != nil {
+		return err
 	}
 
-	if len(queue) > 0 {
-		if err := m.DB.AddToQueue(id, queue); err != nil {
+	switch {
+	case result.IsLocal && result.Mailbox != nil:
+		logrus.Debugf("adding %q to mailbox %d", mail.ID, result.Mailbox.ID)
+
+		err := queries.InsertMailboxEntry(tx, result.Mailbox, mail)
+		if !storage.IsErrUnique(err) {
 			return err
 		}
 
-		log.Debug("mail queued for outbound delivery")
+	case !result.IsLocal:
+		// TODO: Add to outbound queue.
+		logrus.Debugf("queueing %q for outbound delivery to %q", mail.ID, to)
 
-		m.Queue.WakeUp()
+	default:
+		return fmt.Errorf("could not deliver to unknown address %q", to)
 	}
 
 	return nil

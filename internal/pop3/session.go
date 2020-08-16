@@ -18,6 +18,7 @@ package pop3
 import (
 	"time"
 
+	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
@@ -54,13 +55,8 @@ type session struct {
 	state sessionState
 	name  string
 
-	mailbox struct {
-		id      int64
-		marks   map[int64]bool
-		entries []storage.Entry
-		size    int64
-		sizeDel int64
-	}
+	mailbox *storage.Mailbox
+	inbox   *delivery.Inbox
 }
 
 func (s *session) send(r *reply) error {

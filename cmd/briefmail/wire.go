@@ -20,7 +20,6 @@ package main
 import (
 	"github.com/google/wire"
 
-	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/certs"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/pop3"
@@ -29,33 +28,34 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
-var wireSet = wire.NewSet(
-	wire.Struct(new(startCommand), "*"),
-	wire.Struct(new(shellCommand), "*"),
-
-	certs.NewTLSConfig,
-
-	storage.NewDB,
-	storage.NewBlobs,
-	storage.NewCache,
-	storage.NewCleaner,
-
-	hook.FromHooks,
-	hook.DataHooks,
-
-	smtp.New,
-	pop3.New,
-
-	wire.Struct(new(delivery.Mailman), "*"),
-	wire.Struct(new(delivery.QueueWorker), "*"),
-
-	addressbook.Parse,
-)
-
 func newStartCommand() (*startCommand, error) {
-	panic(wire.Build(wireSet))
+	panic(wire.Build(
+		wire.Struct(new(startCommand), "*"),
+
+		certs.NewTLSConfig,
+
+		storage.OpenDatabase,
+		storage.NewBlobs,
+		storage.NewCache,
+
+		hook.FromHooks,
+		hook.DataHooks,
+
+		smtp.New,
+		pop3.New,
+
+		delivery.NewAuthenticator,
+		delivery.NewAddressbook,
+		delivery.NewMailman,
+		delivery.NewInboxer,
+		delivery.NewCleaner,
+	))
 }
 
 func newShellCommand() (*shellCommand, error) {
-	panic(wire.Build(wireSet))
+	panic(wire.Build(
+		wire.Struct(new(shellCommand), "*"),
+
+		storage.OpenDatabase,
+	))
 }

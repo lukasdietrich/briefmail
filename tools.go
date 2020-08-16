@@ -6,6 +6,9 @@ import (
 	// Linter
 	_ "golang.org/x/lint/golint"
 
-	// Dependency Injection
+	// Dependency injection
 	_ "github.com/google/wire/cmd/wire"
+
+	// Database migrations
+	_ "github.com/rubenv/sql-migrate/sql-migrate"
 )

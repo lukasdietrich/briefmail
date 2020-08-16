@@ -1,28 +1,29 @@
 VERSION  = $(shell git describe --always --dirty)
 
-MAIN_PKG = ./cmd/briefmail
+MAIN     = ./cmd/briefmail
+INTERNAL = ./internal
+
 TARGET   = ./target
 SOURCE   = $(shell find . -name "*.go" ! -name "*_gen.go")
+
 BINARY   = $(TARGET)/briefmail
-WIRE_GEN = $(MAIN_PKG)/wire_gen.go
+WIRE     = $(MAIN)/wire_gen.go
 
 .PHONY: all
 all: clean build
 
 .PHONY: clean
 clean:
-	rm -rf $(TARGET)
-	rm -f $(WIRE_GEN)
+	rm -rf $(TARGET) $(WIRE)
 
 .PHONY: build
 build: $(BINARY)
 
-$(WIRE_GEN): $(SOURCE)
-	wire ./...
-
-$(BINARY): $(SOURCE) $(WIRE_GEN)
+$(TARGET):
 	mkdir -p $(TARGET)
-	go build \
-		-o $(BINARY) \
-		-ldflags '-X "main.Version=$(VERSION)"' \
-		$(MAIN_PKG)
+
+$(BINARY): $(WIRE) | $(TARGET)
+	go build -o $(BINARY) -ldflags '-X "main.Version=$(VERSION)"' $(MAIN)
+
+$(WIRE): $(SOURCE)
+	wire ./...

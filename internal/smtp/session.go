@@ -20,6 +20,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
+	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
@@ -57,7 +58,7 @@ type session struct {
 	state    sessionState
 	envelope mails.Envelope
 	headers  []hook.HeaderField
-	mailbox  *int64
+	mailbox  *storage.Mailbox
 }
 
 func (s *session) isSubmission() bool {

@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/addressbook"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
@@ -40,10 +39,10 @@ type Proto struct {
 
 // New creates a new Protocol instance to be used with a textproto Server
 func New(
-	mailman delivery.Mailman,
-	addressbook addressbook.Addressbook,
+	authenticator *delivery.Authenticator,
+	mailman *delivery.Mailman,
+	addressbook *delivery.Addressbook,
 	cache *storage.Cache,
-	db *storage.DB,
 	tlsConfig *tls.Config,
 	fromHooks []hook.FromHook,
 	dataHooks []hook.DataHook,
@@ -63,7 +62,7 @@ func New(
 			),
 
 			"MAIL": mail(addressbook, maxSize, fromHooks),
-			"RCPT": rcpt(mailman, addressbook),
+			"RCPT": rcpt(addressbook),
 			"DATA": data(mailman, cache, maxSize, dataHooks),
 
 			"NOOP": noop(),
@@ -72,7 +71,7 @@ func New(
 			"QUIT": quit(),
 
 			"STARTTLS": starttls(tlsConfig),
-			"AUTH":     auth(db),
+			"AUTH":     auth(authenticator),
 		},
 	}
 }
@@ -103,10 +102,10 @@ func (p *Proto) Handle(c textproto.Conn) {
 
 	switch err := p.loop(s); err {
 	case io.EOF, errCloseSession, nil:
-		s.send(&rBye) // nolint:errcheck
+		s.send(&rBye)
 	default:
 		log.Warn(err)
-		s.send(&rError) // nolint:errcheck
+		s.send(&rError)
 	}
 }
 

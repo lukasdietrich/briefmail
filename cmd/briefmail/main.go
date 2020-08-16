@@ -17,13 +17,14 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
@@ -41,6 +42,7 @@ Commands:
   shell     Start an interactive administration shell
 
 Options:
+%s
 `
 
 var (
@@ -50,30 +52,31 @@ var (
 
 func init() {
 	viper.SetDefault("log.level", "debug")
-
-	logrus.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp:    true,
-		QuoteEmptyFields: true,
-	})
 }
 
 func main() {
-	var (
-		configFilename string
-	)
+	var configFilename string
 
-	flag.StringVar(&configFilename, "config", "", "Path to configuration file")
-	flag.Usage = printUsage
-	flag.Parse()
+	flags := pflag.NewFlagSet("briefmail", pflag.ContinueOnError)
+	flags.StringVarP(&configFilename, "config", "c", "", "Path to a configuration file")
+	flags.Usage = printUsage(flags)
 
-	switch commandName := flag.Arg(0); commandName {
+	if err := flags.Parse(os.Args); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return
+		}
+
+		logrus.Fatal(err)
+	}
+
+	switch commandName := flags.Arg(1); commandName {
 	case "start", "shell":
 		setupConfig(configFilename)
 		setupLogger()
 		printConfig()
 		runCommand(commandName)
 	default:
-		flag.Usage()
+		flags.Usage()
 	}
 }
 
@@ -103,9 +106,12 @@ func runCommand(commandName string) {
 	}
 }
 
-func printUsage() {
-	fmt.Fprintf(flag.CommandLine.Output(), usageText, Version)
-	flag.PrintDefaults()
+func printUsage(flags *pflag.FlagSet) func() {
+	return func() {
+		fmt.Fprintf(os.Stderr, usageText,
+			Version,
+			flags.FlagUsages())
+	}
 }
 
 func setupLogger() {

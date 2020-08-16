@@ -22,8 +22,8 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -62,7 +62,7 @@ func user() handler {
 // `PASS` command as specified in RFC#1939
 //
 //     "PASS" <password> CRLF
-func pass(l *locks, db *storage.DB) handler {
+func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inboxer) handler {
 	var (
 		rOk        = reply{true, "I knew it was you!"}
 		rWrongPass = reply{false, "nice try"}
@@ -80,26 +80,28 @@ func pass(l *locks, db *storage.DB) handler {
 			return errInvalidSyntax
 		}
 
-		id, ok, err := db.Authenticate(s.name, string(args[0]))
+		addr, err := mails.ParseUnicode(s.name)
 		if err != nil {
 			return err
 		}
 
-		if !ok {
-			return s.send(&rWrongPass)
+		mailbox, err := authenticator.Auth(s.Context(), addr, args[0])
+		if err != nil {
+			if errors.Is(err, delivery.ErrWrongAddressPassword) {
+				return s.send(&rWrongPass)
+			}
+
+			return err
 		}
 
-		if !l.lock(id) {
+		if !l.lock(mailbox.ID) {
 			return s.send(&rLocked)
 		}
 
-		s.mailbox.entries, s.mailbox.size, err = db.Entries(id)
+		s.inbox, err = inboxer.Inbox(s.Context(), mailbox)
 		if err != nil {
 			return err
 		}
-
-		s.mailbox.id = id
-		s.mailbox.marks = make(map[int64]bool)
 
 		s.state = sTransaction
 
@@ -110,30 +112,11 @@ func pass(l *locks, db *storage.DB) handler {
 // `QUIT` command as specified in RFC#1939
 //
 //     "QUIT" CRLF
-func quit(db *storage.DB, blobs *storage.Blobs) handler {
-	cleaner := storage.NewCleaner(db, blobs)
-
+func quit(inboxer *delivery.Inboxer) handler {
 	return func(s *session, _ *command) error {
 		if s.state.in(sTransaction) {
-			log.WithFields(logrus.Fields{
-				"mailbox": s.mailbox.id,
-				"tls":     s.Conn.IsTLS(),
-				"deleted": len(s.mailbox.marks),
-				"total":   len(s.mailbox.entries),
-			}).Debug("end of transaction")
-
-			mails := make([]string, 0, len(s.mailbox.marks))
-
-			for n := range s.mailbox.marks {
-				mails = append(mails, s.mailbox.entries[int(n)].MailID)
-			}
-
-			if err := db.DeleteEntries(mails, s.mailbox.id); err != nil {
+			if err := inboxer.Commit(s.Context(), s.mailbox, s.inbox); err != nil {
 				return err
-			}
-
-			if err := cleaner.Clean(); err != nil {
-				log.Warn(err)
 			}
 		}
 
@@ -152,7 +135,7 @@ func stat() handler {
 
 		return s.send(&reply{
 			true,
-			fmt.Sprintf("%d %d", len(s.mailbox.entries), s.mailbox.size),
+			fmt.Sprintf("%d %d", s.inbox.Count(), s.inbox.Size()),
 		})
 	}
 }
@@ -174,17 +157,15 @@ func list() handler {
 		case 0:
 			s.send(&reply{
 				true,
-				fmt.Sprintf("%d messages (%d octets)",
-					len(s.mailbox.entries)-len(s.mailbox.marks),
-					s.mailbox.size-s.mailbox.sizeDel),
+				fmt.Sprintf("%d messages (%d octets)", s.inbox.Count(), s.inbox.Size()),
 			})
 
-			for i, entry := range s.mailbox.entries {
-				if s.mailbox.marks[int64(i)] {
+			for i, mail := range s.inbox.Mails {
+				if s.inbox.IsMarked(i) {
 					continue
 				}
 
-				fmt.Fprintf(s, "%d %d", i+1, entry.Size)
+				fmt.Fprintf(s, "%d %d", i+1, mail.Size)
 				s.Endline()
 			}
 
@@ -199,15 +180,15 @@ func list() handler {
 				return errInvalidSyntax
 			}
 
-			n--
+			index := int(n - 1)
 
-			if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
+			if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
 				return s.send(&rNoMessage)
 			}
 
 			return s.send(&reply{
 				true,
-				fmt.Sprintf("%d %d", n, s.mailbox.entries[n].Size),
+				fmt.Sprintf("%d %d", n, s.inbox.Mails[index].Size),
 			})
 
 		default:
@@ -236,12 +217,12 @@ func uidl() handler {
 		case 0:
 			s.send(&rOk)
 
-			for i, entry := range s.mailbox.entries {
-				if s.mailbox.marks[int64(i)] {
+			for i, mail := range s.inbox.Mails {
+				if s.inbox.IsMarked(i) {
 					continue
 				}
 
-				fmt.Fprintf(s, "%d %s", i+1, entry.MailID)
+				fmt.Fprintf(s, "%d %s", i+1, mail.ID)
 				s.Endline()
 			}
 
@@ -256,15 +237,15 @@ func uidl() handler {
 				return errInvalidSyntax
 			}
 
-			n--
+			index := int(n - 1)
 
-			if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
+			if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
 				return s.send(&rNoMessage)
 			}
 
 			return s.send(&reply{
 				true,
-				fmt.Sprintf("%d %s", n, s.mailbox.entries[n].MailID),
+				fmt.Sprintf("%d %s", n, s.inbox.Mails[index].ID),
 			})
 
 		default:
@@ -276,7 +257,7 @@ func uidl() handler {
 // `RETR` command as specified in RFC#1939
 //
 //     "RETR" <id> CRLF
-func retr(blobs *storage.Blobs) handler {
+func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 	var (
 		rOk        = reply{true, "message coming"}
 		rNoMessage = reply{false, "no such message"}
@@ -298,9 +279,9 @@ func retr(blobs *storage.Blobs) handler {
 			return errInvalidSyntax
 		}
 
-		n--
+		index := int(n - 1)
 
-		if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
+		if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
 			return s.send(&rNoMessage)
 		}
 
@@ -308,7 +289,7 @@ func retr(blobs *storage.Blobs) handler {
 			return err
 		}
 
-		r, err := blobs.Reader(s.mailbox.entries[n].MailID)
+		r, err := blobs.Reader(s.inbox.Mails[index].ID)
 		if err != nil {
 			return err
 		}
@@ -350,15 +331,13 @@ func dele() handler {
 			return errInvalidSyntax
 		}
 
-		n--
+		index := int(n - 1)
 
-		if n < 0 || n >= int64(len(s.mailbox.entries)) || s.mailbox.marks[n] {
+		if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
 			return s.send(&rNoMessage)
 		}
 
-		s.mailbox.marks[n] = true
-		s.mailbox.sizeDel += s.mailbox.entries[n].Size
-
+		s.inbox.Mark(index)
 		return s.send(&rOk)
 	}
 }
@@ -385,11 +364,7 @@ func rset() handler {
 			return errBadSequence
 		}
 
-		if len(s.mailbox.marks) > 0 {
-			s.mailbox.marks = make(map[int64]bool)
-			s.mailbox.sizeDel = 0
-		}
-
+		s.inbox.Reset()
 		return s.send(&rOk)
 	}
 }
@@ -435,8 +410,8 @@ func capa(capabilities ...string) handler {
 		}
 
 		for _, capability := range capabilities {
-			s.WriteString(capability) // nolint:errcheck
-			s.Endline()               // nolint:errcheck
+			s.WriteString(capability)
+			s.Endline()
 		}
 
 		s.WriteString(".")
