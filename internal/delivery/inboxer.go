@@ -18,6 +18,8 @@ package delivery
 import (
 	"context"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
@@ -74,7 +76,15 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	if err := i.cleaner.Clean(ctx); err != nil {
+		logrus.Errorf("error during clean: %v", err)
+	}
+
+	return nil
 }
 
 // Inbox is a list of unreal mails as well as a set of "marks".

@@ -34,8 +34,7 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 func DeleteMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
 		delete from "mails"
-		where "id" = :id
-		limit 1 ;
+		where "id" = :id ;
 	`
 
 	_, err := tx.NamedExec(query, mail)
