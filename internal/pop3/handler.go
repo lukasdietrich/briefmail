@@ -98,6 +98,7 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 			return s.send(&rLocked)
 		}
 
+		s.mailbox = mailbox
 		s.inbox, err = inboxer.Inbox(s.Context(), mailbox)
 		if err != nil {
 			return err

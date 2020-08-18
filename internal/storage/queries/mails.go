@@ -53,6 +53,33 @@ func InsertMailboxEntry(tx *storage.Tx, mailbox *storage.Mailbox, mail *storage.
 	return err
 }
 
+// DeleteMailboxEntry deletes a mail from an inbox. This does not remove the mail itself.
+func DeleteMailboxEntry(tx *storage.Tx, mailbox *storage.Mailbox, mail *storage.Mail) error {
+	const query = `
+		delete from "mailbox_entries"
+		where "mailbox_id" = $1
+		  and "mail_id" = $2 ;
+	`
+
+	_, err := tx.Exec(query, mailbox.ID, mail.ID)
+	return err
+}
+
+// FindMailsByMailbox returns a slice of mails in the mailbox sorted by date.
+func FindMailsByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]storage.Mail, error) {
+	const query = `
+		select "mails".*
+		from "mails"
+			inner join "mailbox_entries"
+				on "mails"."id" = "mailbox_entries"."mail_id"
+		where "mailbox_entries"."mailbox_id" = $1
+		order by "mails"."received_at" asc ;
+	`
+
+	var mailSlice []storage.Mail
+	return mailSlice, tx.Select(&mailSlice, query, mailbox.ID)
+}
+
 // FindOrphanedMails returns a slice of mails that are not in any mailbox.
 func FindOrphanedMails(tx *storage.Tx) ([]storage.Mail, error) {
 	const query = `

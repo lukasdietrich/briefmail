@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
 
 // Inboxer is service to read a list of unread mails of a mailbox and committing changes later.
@@ -37,12 +38,43 @@ func NewInboxer(database *storage.Database, cleaner *Cleaner) *Inboxer {
 
 // Inbox reads the a list of unread mails for a mailbox.
 func (i *Inboxer) Inbox(ctx context.Context, mailbox *storage.Mailbox) (*Inbox, error) {
-	return nil, nil
+	tx, err := i.database.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	defer tx.Rollback()
+
+	mails, err := queries.FindMailsByMailbox(tx, mailbox)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return newInbox(mails), nil
 }
 
 // Commit removes all marked mails of an inbox from the mailbox.
 func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *Inbox) error {
-	return nil
+	tx, err := i.database.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	for index, mail := range inbox.Mails {
+		if inbox.IsMarked(index) {
+			if err := queries.DeleteMailboxEntry(tx, mailbox, &mail); err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
 }
 
 // Inbox is a list of unreal mails as well as a set of "marks".
@@ -52,6 +84,21 @@ type Inbox struct {
 	marks      map[int]bool
 	size       int64
 	sizeMarked int64
+}
+
+func newInbox(mails []storage.Mail) *Inbox {
+	var totalSize int64
+	for _, mail := range mails {
+		totalSize += mail.Size
+	}
+
+	inbox := Inbox{
+		Mails: mails,
+		size:  totalSize,
+	}
+
+	inbox.Reset()
+	return &inbox
 }
 
 // IsMarked checks if a mail is marked for removal.
