@@ -68,7 +68,8 @@ func FindAddress(tx *storage.Tx, localPart, domain string) (*storage.Address, er
 	return &address, tx.Get(&address, query, localPart, domain)
 }
 
-func ListAddressesByDomain(tx *storage.Tx, domain string) ([]storage.Address, error) {
+// FindAddressesByDomain returns all addresses matching the domain.
+func FindAddressesByDomain(tx *storage.Tx, domain string) ([]storage.Address, error) {
 	const query = `
 		select "addresses".*
 		from "addresses" inner join "domains" on "addresses"."domain_id" = "domains"."id"

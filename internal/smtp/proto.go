@@ -33,6 +33,7 @@ import (
 
 var log = logrus.WithField("prefix", "smtp")
 
+// Proto is a smtp server protocol implementation.
 type Proto struct {
 	handlerMap map[string]handler
 }
@@ -87,6 +88,8 @@ var (
 	rInvalidAddress = reply{553, "invalid address format"}
 )
 
+// Handle accepts an smtp connection and handles all incoming commands in a loop until the
+// transmission is closed.
 func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,

@@ -31,22 +31,31 @@ func init() {
 	viper.SetDefault("hook.dnsbl.server", "zen.spamhaus.org")
 }
 
+// HeaderField is a single mail header, that is to be set as a result of a hook.
 type HeaderField struct {
 	Key   string
 	Value string
 }
 
+// Result is the result of calling a hook on incoming mail.
 type Result struct {
+	// Reject indicates if the mail should not be accepted for delivery.
 	Reject bool
-
+	// Headers is a list of headers to be prepended to incoming mail, if it is not rejected.
 	Headers []HeaderField
-	Code    int
-	Text    string
+	// Code is the smtp reply code used on rejection.
+	Code int
+	// Text is the smtp reply text used on rejection.
+	Text string
 }
 
+// FromHook is a hook called during `MAIL`.
 type FromHook func(bool, net.IP, mails.Address) (*Result, error)
+
+// DataHook is a hook called during `DATA`.
 type DataHook func(bool, io.Reader) (*Result, error)
 
+// FromHooks creates all available and enabled FromHook implementations.
 func FromHooks() []FromHook {
 	var hooks []FromHook
 
@@ -62,6 +71,7 @@ func FromHooks() []FromHook {
 	return hooks
 }
 
+// DataHooks creates all available and enabled DataHook implementations.
 func DataHooks() []DataHook {
 	return nil
 }

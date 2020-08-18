@@ -61,18 +61,6 @@ func DeleteDomain(tx *storage.Tx, name string) error {
 	return nil
 }
 
-// ListDomains returns all domains, sorted by name.
-func ListDomains(tx *storage.Tx) ([]storage.Domain, error) {
-	const query = `
-		select *
-		from "domains"
-		order by "name" asc ;
-	`
-
-	var domainSlice []storage.Domain
-	return domainSlice, tx.Select(&domainSlice, query)
-}
-
 // ExistsDomain checks if a domain is already inserted.
 func ExistsDomain(tx *storage.Tx, name string) (bool, error) {
 	const query = `
@@ -93,6 +81,7 @@ func ExistsDomain(tx *storage.Tx, name string) (bool, error) {
 	return exists, nil
 }
 
+// FindDomain returns the domain matching the name.
 func FindDomain(tx *storage.Tx, name string) (*storage.Domain, error) {
 	const query = `
 		select *
@@ -103,4 +92,16 @@ func FindDomain(tx *storage.Tx, name string) (*storage.Domain, error) {
 
 	var domain storage.Domain
 	return &domain, tx.Get(&domain, query, name)
+}
+
+// FindDomains returns all domains sorted by name.
+func FindDomains(tx *storage.Tx) ([]storage.Domain, error) {
+	const query = `
+		select *
+		from "domains"
+		order by "name" asc ;
+	`
+
+	var domainSlice []storage.Domain
+	return domainSlice, tx.Select(&domainSlice, query)
 }

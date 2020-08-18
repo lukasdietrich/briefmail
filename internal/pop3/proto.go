@@ -30,6 +30,7 @@ import (
 
 var log = logrus.WithField("prefix", "pop3")
 
+// Proto is a pop3 protocol implementation.
 type Proto struct {
 	locks      *locks
 	handlerMap map[string]handler
@@ -79,6 +80,8 @@ var (
 	rInvalidSyntax  = reply{false, "invalid syntax"}
 )
 
+// Handle accepts a pop3 connection and handles all incoming commands in a loop until the
+// transmission is closed.
 func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,

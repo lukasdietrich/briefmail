@@ -95,7 +95,7 @@ func (s *shellCommand) domainsList(ctx shellContext) error {
 		return errors.New("Usage: domains list")
 	}
 
-	domains, err := queries.ListDomains(ctx.tx)
+	domains, err := queries.FindDomains(ctx.tx)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (s *shellCommand) addressesList(ctx shellContext) error {
 		return fmt.Errorf("domain %q does not exist", domain)
 	}
 
-	addresses, err := queries.ListAddressesByDomain(ctx.tx, domain)
+	addresses, err := queries.FindAddressesByDomain(ctx.tx, domain)
 	if err != nil {
 		return err
 	}

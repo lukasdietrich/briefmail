@@ -19,6 +19,7 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
+// InsertMail inserts a new mail.
 func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
 		insert into "mails" ( "id", "received_at", "return_path", "size" )
@@ -29,6 +30,7 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 	return err
 }
 
+// DeleteMail removes an existing mail.
 func DeleteMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
 		delete from "mails"
@@ -40,6 +42,7 @@ func DeleteMail(tx *storage.Tx, mail *storage.Mail) error {
 	return err
 }
 
+// InsertMailboxEntry inserts a mail into a mailbox.
 func InsertMailboxEntry(tx *storage.Tx, mailbox *storage.Mailbox, mail *storage.Mail) error {
 	const query = `
 		insert into "mailbox_entries" ( "mailbox_id", "mail_id"  )

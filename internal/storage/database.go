@@ -99,6 +99,8 @@ func loadMigrations() (migrate.MigrationSource, error) {
 	return &source, nil
 }
 
+// BeginTx starts a new database transaction. Every call to Exec, Query, Get or Select uses passes
+// the context provided to this method.
 func (d *Database) BeginTx(ctx context.Context) (*Tx, error) {
 	raw, err := d.conn.BeginTxx(ctx, nil)
 	if err != nil {
@@ -108,15 +110,20 @@ func (d *Database) BeginTx(ctx context.Context) (*Tx, error) {
 	return &Tx{raw, ctx}, nil
 }
 
+// Tx is a database transaction. Unlike the standard *sql.Tx, this one also wraps the context used
+// in to begin the transaction.
 type Tx struct {
 	raw *sqlx.Tx
 	ctx context.Context
 }
 
+// Rollback rolls back the transaction.
 func (t *Tx) Rollback() error {
 	return t.raw.Rollback()
 }
 
+// RollbackWith calls Rollback and, unless the transaction was already committed, calls the
+// callback function.
 func (t *Tx) RollbackWith(callback func()) error {
 	err := t.Rollback()
 
@@ -127,22 +134,27 @@ func (t *Tx) RollbackWith(callback func()) error {
 	return err
 }
 
+// Commit commits the transaction.
 func (t *Tx) Commit() error {
 	return t.raw.Commit()
 }
 
+// Exec executes a query that does not return rows.
 func (t *Tx) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return t.raw.ExecContext(t.ctx, query, args...)
 }
 
+// NamedExec executes a query and maps the query parameters by name.
 func (t *Tx) NamedExec(query string, args interface{}) (sql.Result, error) {
 	return t.raw.NamedExecContext(t.ctx, query, args)
 }
 
+// Get executes a query returning a single row.
 func (t *Tx) Get(dest interface{}, query string, args ...interface{}) error {
 	return t.raw.GetContext(t.ctx, dest, query, args...)
 }
 
+// Select executes a query returning multiple rows.
 func (t *Tx) Select(dest interface{}, query string, args ...interface{}) error {
 	return t.raw.SelectContext(t.ctx, dest, query, args...)
 }

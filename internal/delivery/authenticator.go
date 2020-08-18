@@ -26,19 +26,26 @@ import (
 )
 
 var (
+	// ErrWrongAddressPassword is returned when an address either does not exist or the password
+	// does not match the hash.
 	ErrWrongAddressPassword = errors.New("wrong address or password combination")
 )
 
+// Authenticator is for authentication of users based on their addresses.
 type Authenticator struct {
 	database *storage.Database
 }
 
+// NewAuthenticator creates a new Authenticator.
 func NewAuthenticator(database *storage.Database) *Authenticator {
 	return &Authenticator{
 		database: database,
 	}
 }
 
+// Auth searches for a mailbox by address. If the address does not exist, is not local or the
+// password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
+// may occur.
 func (a *Authenticator) Auth(ctx context.Context, addr mails.Address, pass []byte) (*storage.Mailbox, error) {
 	tx, err := a.database.BeginTx(ctx)
 	if err != nil {

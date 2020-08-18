@@ -63,7 +63,7 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 		return err
 	}
 
-	defer tx.RollbackWith(m.rollback(id))
+	defer tx.RollbackWith(m.rollbackBlob(id))
 
 	mail := storage.Mail{
 		ID:         id,
@@ -87,11 +87,10 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 	return tx.Commit()
 }
 
-// rollback is used to rollback the transaction of Deliver as well as to cleanup
-// the mail blob, if an error occurs during delivery. Further errors happening
-// inside of rollback are logged but not handled, because we do not want to
+// rollbackBlob is used to rollback the mail blob, if an error occurs during delivery. Further
+// errors happening inside of rollbackBlob are logged but not handled, because we do not want to
 // shadow the original cause of the rollback.
-func (m *Mailman) rollback(id string) func() {
+func (m *Mailman) rollbackBlob(id string) func() {
 	return func() {
 		logrus.Info("an error occured during delivery, rolling back")
 

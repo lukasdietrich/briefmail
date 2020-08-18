@@ -33,6 +33,7 @@ func InsertMailbox(tx *storage.Tx, mailbox *storage.Mailbox) error {
 	return err
 }
 
+// FindMailboxByAddress returns the mailbox of the address matching the local-part and domain.
 func FindMailboxByAddress(tx *storage.Tx, localPart, domain string) (*storage.Mailbox, error) {
 	const query = `
 		select "mailboxes".*
