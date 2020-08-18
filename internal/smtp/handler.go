@@ -413,9 +413,8 @@ func auth(authenticator *delivery.Authenticator) handler {
 		}
 
 		var (
-			fields = bytes.Fields(c.tail)
-			name   string
-			pass   []byte
+			fields     = bytes.Fields(c.tail)
+			name, pass []byte
 		)
 
 		if len(fields) < 1 {
@@ -444,7 +443,7 @@ func auth(authenticator *delivery.Authenticator) handler {
 				}
 			}
 
-			name = string(fields[1])
+			name = fields[1]
 			pass = fields[2]
 
 		case "LOGIN":
@@ -462,7 +461,7 @@ func auth(authenticator *delivery.Authenticator) handler {
 				return errCommandSyntax
 			}
 
-			name = string(b)
+			name = b
 
 			if err := s.send(&rPassword); err != nil {
 				return err
@@ -482,12 +481,7 @@ func auth(authenticator *delivery.Authenticator) handler {
 			return errCommandSyntax
 		}
 
-		addr, err := mails.ParseUnicode(name)
-		if err != nil {
-			return err
-		}
-
-		mailbox, err := authenticator.Auth(s.Context(), addr, pass)
+		mailbox, err := authenticator.Auth(s.Context(), name, pass)
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
 				return s.send(&rFail)

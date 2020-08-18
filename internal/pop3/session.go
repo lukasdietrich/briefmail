@@ -53,7 +53,7 @@ type session struct {
 	textproto.Conn
 
 	state sessionState
-	name  string
+	name  []byte
 
 	mailbox *storage.Mailbox
 	inbox   *delivery.Inbox

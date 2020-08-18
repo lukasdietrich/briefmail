@@ -23,7 +23,6 @@ import (
 	"strconv"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
-	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -52,7 +51,7 @@ func user() handler {
 			return errInvalidSyntax
 		}
 
-		s.name = string(args[0])
+		s.name = args[0]
 		s.state = sUser
 
 		return s.send(&rOk)
@@ -80,12 +79,7 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 			return errInvalidSyntax
 		}
 
-		addr, err := mails.ParseUnicode(s.name)
-		if err != nil {
-			return err
-		}
-
-		mailbox, err := authenticator.Auth(s.Context(), addr, args[0])
+		mailbox, err := authenticator.Auth(s.Context(), s.name, args[0])
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
 				return s.send(&rWrongPass)

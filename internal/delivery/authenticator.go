@@ -19,6 +19,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/lukasdietrich/briefmail/internal/crypto"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
@@ -46,7 +48,35 @@ func NewAuthenticator(database *storage.Database) *Authenticator {
 // Auth searches for a mailbox by address. If the address does not exist, is not local or the
 // password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
 // may occur.
-func (a *Authenticator) Auth(ctx context.Context, addr mails.Address, pass []byte) (*storage.Mailbox, error) {
+func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.Mailbox, error) {
+	mailbox, err := a.lookup(ctx, name)
+	if err != nil {
+		if isErrUnknownAddress(err) {
+			logrus.Infof("failed auth attempt for %q: unknown or invalid address", name)
+			return nil, ErrWrongAddressPassword
+		}
+
+		return nil, err
+	}
+
+	if err := crypto.Verify(mailbox, pass); err != nil {
+		if errors.Is(err, crypto.ErrPasswordMismatch) {
+			logrus.Infof("failed auth attempt for %q: wrong password", name)
+			return nil, ErrWrongAddressPassword
+		}
+
+		return nil, err
+	}
+
+	return mailbox, nil
+}
+
+func (a *Authenticator) lookup(ctx context.Context, name []byte) (*storage.Mailbox, error) {
+	addr, err := mails.ParseNormalized(string(name))
+	if err != nil {
+		return nil, err
+	}
+
 	tx, err := a.database.BeginTx(ctx)
 	if err != nil {
 		return nil, err
@@ -56,20 +86,14 @@ func (a *Authenticator) Auth(ctx context.Context, addr mails.Address, pass []byt
 
 	mailbox, err := queries.FindMailboxByAddress(tx, addr.LocalPart(), addr.Domain())
 	if err != nil {
-		if storage.IsErrNoRows(err) {
-			return nil, ErrWrongAddressPassword
-		}
-
-		return nil, err
-	}
-
-	if err := crypto.Verify(mailbox, pass); err != nil {
-		if errors.Is(err, crypto.ErrPasswordMismatch) {
-			return nil, ErrWrongAddressPassword
-		}
-
 		return nil, err
 	}
 
 	return mailbox, tx.Commit()
+}
+
+func isErrUnknownAddress(err error) bool {
+	return storage.IsErrNoRows(err) ||
+		errors.Is(err, mails.ErrInvalidAddressFormat) ||
+		errors.Is(err, mails.ErrPathTooLong)
 }
