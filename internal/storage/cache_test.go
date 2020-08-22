@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"math/rand"
 	"testing"
@@ -39,7 +40,7 @@ func TestCache(t *testing.T) {
 	assert.Equal(t, len(data), n)
 
 	t.Run("InMemory", func(t *testing.T) {
-		entry, err := cache.Write(bytes.NewReader(data[:1023]))
+		entry, err := cache.Write(context.TODO(), bytes.NewReader(data[:1023]))
 		assert.NoError(t, err)
 		assert.NotNil(t, entry)
 		assert.NotNil(t, entry.memory)
@@ -55,11 +56,11 @@ func TestCache(t *testing.T) {
 			assert.Equal(t, data[:1023], b)
 		}
 
-		assert.NoError(t, entry.Release())
+		assert.NoError(t, entry.Release(context.TODO()))
 	})
 
 	t.Run("OnDisk", func(t *testing.T) {
-		entry, err := cache.Write(bytes.NewReader(data))
+		entry, err := cache.Write(context.TODO(), bytes.NewReader(data))
 		assert.NoError(t, err)
 		assert.NotNil(t, entry)
 		assert.Nil(t, entry.memory)
@@ -78,7 +79,7 @@ func TestCache(t *testing.T) {
 			assert.Equal(t, data, b)
 		}
 
-		assert.Nil(t, entry.Release())
+		assert.Nil(t, entry.Release(context.TODO()))
 
 		_, err = cache.fs.Stat(entry.file.Name())
 		assert.Error(t, err)

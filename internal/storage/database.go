@@ -24,8 +24,9 @@ import (
 	rice "github.com/GeertJohan/go.rice"
 	"github.com/jmoiron/sqlx"
 	migrate "github.com/rubenv/sql-migrate"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 const driverName = "sqlite3"
@@ -48,7 +49,9 @@ func init() {
 // `storage.database.journalmode` will be used for the journalmode pragma.
 func OpenDatabase() (*Database, error) {
 	dsn := createDataSourceName()
-	logrus.Debugf("connecting to database %q", dsn)
+	log.Info().
+		Str("dataSourceName", dsn).
+		Msg("connecting to database")
 
 	db, err := sqlx.Open(driverName, dsn)
 	if err != nil {
@@ -66,7 +69,9 @@ func OpenDatabase() (*Database, error) {
 	}
 
 	if n > 0 {
-		logrus.Infof("%d database migrations applied", n)
+		log.Info().
+			Int("migrations", n).
+			Msg("database migrations applied")
 	}
 
 	return &Database{db}, nil

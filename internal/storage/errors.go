@@ -14,13 +14,16 @@ func IsErrNoRows(err error) bool {
 
 // IsErrUnique checks if an error is caused by a unique constraint.
 func IsErrUnique(err error) bool {
-	return isErrSqliteExtended(err, sqlite3.ErrConstraintUnique)
+	return isErrSqliteExtended(err, sqlite3.ErrConstraintUnique) ||
+		isErrSqliteExtended(err, sqlite3.ErrConstraintPrimaryKey)
 }
 
-//
 func isErrSqliteExtended(err error, extendedCode sqlite3.ErrNoExtended) bool {
 	var sqliteErr sqlite3.Error
 
-	return errors.As(err, &sqliteErr) &&
-		sqliteErr.ExtendedCode == extendedCode
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.ExtendedCode == extendedCode
+	}
+
+	return false
 }

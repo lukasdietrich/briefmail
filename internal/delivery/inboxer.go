@@ -18,8 +18,7 @@ package delivery
 import (
 	"context"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
@@ -52,6 +51,11 @@ func (i *Inboxer) Inbox(ctx context.Context, mailbox *storage.Mailbox) (*Inbox, 
 		return nil, err
 	}
 
+	log.InfoContext(ctx).
+		Int64("mailbox", mailbox.ID).
+		Int("mailCount", len(mails)).
+		Msg("inbox loaded")
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -68,8 +72,17 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 
 	defer tx.Rollback()
 
+	log.InfoContext(ctx).
+		Int64("mailbox", mailbox.ID).
+		Msg("committing inbox changes")
+
 	for index, mail := range inbox.Mails {
 		if inbox.IsMarked(index) {
+			log.DebugContext(ctx).
+				Int64("mailbox", mailbox.ID).
+				Str("mail", mail.ID).
+				Msg("deleting mail from mailbox")
+
 			if err := queries.DeleteMailboxEntry(tx, mailbox, &mail); err != nil {
 				return err
 			}
@@ -81,7 +94,9 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 	}
 
 	if err := i.cleaner.Clean(ctx); err != nil {
-		logrus.Errorf("error during clean: %v", err)
+		log.ErrorContext(ctx).
+			Err(err).
+			Msg("error during cleanup")
 	}
 
 	return nil
@@ -119,6 +134,7 @@ func (i *Inbox) IsMarked(index int) bool {
 // Mark marks a mail for removal.
 func (i *Inbox) Mark(index int) {
 	i.marks[index] = true
+	i.sizeMarked += i.Mails[index].Size
 }
 
 // Reset removes all marks.

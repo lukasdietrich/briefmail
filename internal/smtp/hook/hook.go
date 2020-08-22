@@ -16,6 +16,7 @@
 package hook
 
 import (
+	"context"
 	"io"
 	"net"
 
@@ -50,10 +51,10 @@ type Result struct {
 }
 
 // FromHook is a hook called during `MAIL`.
-type FromHook func(bool, net.IP, mails.Address) (*Result, error)
+type FromHook func(context.Context, bool, net.IP, mails.Address) (*Result, error)
 
 // DataHook is a hook called during `DATA`.
-type DataHook func(bool, io.Reader) (*Result, error)
+type DataHook func(context.Context, bool, io.Reader) (*Result, error)
 
 // FromHooks creates all available and enabled FromHook implementations.
 func FromHooks() []FromHook {

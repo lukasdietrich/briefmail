@@ -17,21 +17,20 @@ package smtp
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
-
-var log = logrus.WithField("prefix", "smtp")
 
 // Proto is a smtp server protocol implementation.
 type Proto struct {
@@ -55,24 +54,24 @@ func New(
 
 	return &Proto{
 		handlerMap: map[string]handler{
-			"HELO": helo(hostname),
-			"EHLO": ehlo(hostname,
+			"helo": helo(hostname),
+			"ehlo": ehlo(hostname,
 				fmt.Sprintf("SIZE %d", maxSize),
 				fmt.Sprintf("STARTTLS"),
 				fmt.Sprintf("AUTH %s %s", "PLAIN", "LOGIN"),
 			),
 
-			"MAIL": mail(addressbook, maxSize, fromHooks),
-			"RCPT": rcpt(addressbook),
-			"DATA": data(mailman, cache, maxSize, dataHooks),
+			"mail": mail(addressbook, maxSize, fromHooks),
+			"rcpt": rcpt(addressbook),
+			"data": data(mailman, cache, maxSize, dataHooks),
 
-			"NOOP": noop(),
-			"RSET": rset(),
-			"VRFY": vrfy(),
-			"QUIT": quit(),
+			"noop": noop(),
+			"rset": rset(),
+			"vrfy": vrfy(),
+			"quit": quit(),
 
-			"STARTTLS": starttls(tlsConfig),
-			"AUTH":     auth(authenticator),
+			"starttls": starttls(tlsConfig),
+			"auth":     auth(authenticator),
 		},
 	}
 }
@@ -103,16 +102,23 @@ func (p *Proto) Handle(c textproto.Conn) {
 		return
 	}
 
-	switch err := p.loop(s); err {
+	ctx := log.WithOrigin(c.Context(), "smtp")
+	log.InfoContext(ctx).Msg("starting session")
+
+	switch err := p.loop(ctx, s); err {
 	case io.EOF, errCloseSession, nil:
+		log.InfoContext(ctx).Msg("session closed")
 		s.send(&rBye)
 	default:
-		log.Warn(err)
+		log.ErrorContext(ctx).
+			Err(err).
+			Msg("session closed with an error")
+
 		s.send(&rError)
 	}
 }
 
-func (p *Proto) loop(s *session) error {
+func (p *Proto) loop(ctx context.Context, s *session) error {
 	var cmd command
 
 	for {
@@ -120,9 +126,13 @@ func (p *Proto) loop(s *session) error {
 			return err
 		}
 
-		h, ok := p.handlerMap[string(bytes.ToUpper(cmd.head))]
+		commandName := string(bytes.ToLower(cmd.head))
+		ctx := log.WithCommand(ctx, commandName)
+		h, ok := p.handlerMap[commandName]
 
 		if !ok {
+			log.DebugContext(ctx).Msg("command not implemented")
+
 			if err := s.send(&rNotImplemented); err != nil {
 				return err
 			}
@@ -130,7 +140,13 @@ func (p *Proto) loop(s *session) error {
 			continue
 		}
 
-		if err := h(s, &cmd); err != nil {
+		if err := h(ctx, s, &cmd); err != nil {
+			if err != errCloseSession {
+				log.DebugContext(ctx).
+					Err(err).
+					Msg("error during command")
+			}
+
 			switch err {
 			case errBadSequence:
 				if err := s.send(&rBadSequence); err != nil {

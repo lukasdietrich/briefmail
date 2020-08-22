@@ -16,12 +16,14 @@
 package storage
 
 import (
+	"context"
 	"io"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 func init() {
@@ -50,7 +52,7 @@ func NewBlobs() (*Blobs, error) {
 
 // Write copies all the data from r to a blob, that is addressable by the
 // returned id.
-func (b *Blobs) Write(r io.Reader) (string, int64, error) {
+func (b *Blobs) Write(ctx context.Context, r io.Reader) (string, int64, error) {
 	id, err := newRandomID()
 	if err != nil {
 		return id, -1, err
@@ -61,18 +63,28 @@ func (b *Blobs) Write(r io.Reader) (string, int64, error) {
 		return id, -1, err
 	}
 
-	logrus.Debugf("writing blob %q", id)
+	log.InfoContext(ctx).
+		Str("filename", id).
+		Msg("writing blob")
 
 	size, err := io.Copy(f, r)
 	if err != nil {
-		logrus.Infof("could not write to blob file %q", id)
+		log.WarnContext(ctx).
+			Str("filename", id).
+			Msg("could not write to blob file")
 
 		if err := f.Close(); err != nil {
-			logrus.Warnf("could not close partial blob file %q: %v", id, err)
+			log.WarnContext(ctx).
+				Str("filename", id).
+				Err(err).
+				Msg("could not close partial blob file")
 		}
 
 		if err := b.fs.Remove(id); err != nil {
-			logrus.Warnf("could not remove partial blob file %q: %v", id, err)
+			log.WarnContext(ctx).
+				Str("filename", id).
+				Err(err).
+				Msg("could not remove partial blob file")
 		}
 
 		return id, -1, err
@@ -82,8 +94,11 @@ func (b *Blobs) Write(r io.Reader) (string, int64, error) {
 }
 
 // Delete removes a blob by id.
-func (b *Blobs) Delete(id string) error {
-	logrus.Debugf("removing blob %q", id)
+func (b *Blobs) Delete(ctx context.Context, id string) error {
+	log.InfoContext(ctx).
+		Str("filename", id).
+		Msg("removing blob")
+
 	return b.fs.Remove(id)
 }
 

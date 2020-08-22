@@ -20,7 +20,10 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"sync/atomic"
 	"time"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 var (
@@ -62,16 +65,23 @@ type variableNetConn struct {
 type conn struct {
 	raw   *variableNetConn
 	isTLS bool
+	ctx   context.Context
 
 	Reader
 	Writer
 }
 
+var connCounter int32
+
 func wrapConn(raw net.Conn) *conn {
 	varConn := variableNetConn{Conn: raw}
 
+	ctx := context.TODO()
+	ctx = log.WithConnection(ctx, atomic.AddInt32(&connCounter, 1))
+
 	return &conn{
 		raw: &varConn,
+		ctx: ctx,
 
 		Reader: newReader(&varConn),
 		Writer: newWriter(&varConn),
@@ -127,5 +137,5 @@ func (c *conn) RemoteAddr() net.IP {
 }
 
 func (c *conn) Context() context.Context {
-	return context.TODO()
+	return c.ctx
 }

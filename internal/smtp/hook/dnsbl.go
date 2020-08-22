@@ -16,29 +16,36 @@
 package hook
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func makeDnsblHook() FromHook {
 	server := viper.GetString("hook.dnsbl.server")
-	logrus.Debugf("hook: registering dnsbl hook (server=%s)", server)
+	log.Info().
+		Str("server", server).
+		Msg("registering dnsbl hook")
 
-	return func(submission bool, ip net.IP, _ mails.Address) (*Result, error) {
+	return func(ctx context.Context, submission bool, ip net.IP, _ mails.Address) (*Result, error) {
 		if submission {
-			logrus.Debugf(
-				"skipping dnsbl for %q, because it is a submission", ip)
+			log.InfoContext(ctx).
+				Stringer("ip", ip).
+				Msg("skipping dnsbl, because it is a submission")
 			return &Result{}, nil
 		}
 
 		host := formatReverseIP(ip) + server
-		logrus.Debugf("looking up dnsbl for %q on %q", ip, host)
+		log.InfoContext(ctx).
+			Stringer("ip", ip).
+			Str("host", host).
+			Msg("looking up dnsbl")
 
 		records, err := net.LookupIP(host)
 		if err != nil {
@@ -49,7 +56,9 @@ func makeDnsblHook() FromHook {
 		}
 
 		if len(records) > 0 {
-			logrus.Infof("%q is blacklisted. rejecting request", ip)
+			log.InfoContext(ctx).
+				Stringer("ip", ip).
+				Msg("senders ip is blacklisted. rejecting request")
 
 			return &Result{
 				Reject: true,
@@ -58,7 +67,10 @@ func makeDnsblHook() FromHook {
 			}, nil
 		}
 
-		logrus.Infof("%q is not blacklisted", ip)
+		log.InfoContext(ctx).
+			Stringer("ip", ip).
+			Msg("snders ip is not blacklisted")
+
 		return &Result{}, nil
 	}
 }

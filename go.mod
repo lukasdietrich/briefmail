@@ -13,8 +13,8 @@ require (
 	github.com/jmoiron/sqlx v1.2.0
 	github.com/lukasdietrich/argon2go v0.0.0-20200726125214-434f103de8b3
 	github.com/mattn/go-sqlite3 v1.14.0
+	github.com/rs/zerolog v1.19.0
 	github.com/rubenv/sql-migrate v0.0.0-20200616145509-8d140a17f351
-	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/afero v1.3.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0

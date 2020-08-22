@@ -16,12 +16,14 @@
 package hook
 
 import (
+	"context"
 	"net"
 	"testing"
 
-	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func TestFormatReverseIP(t *testing.T) {
@@ -47,7 +49,7 @@ func TestDnsblHook(t *testing.T) {
 	require.NotNil(t, hook)
 
 	t.Run("BadRecord", func(t *testing.T) {
-		result, err := hook(false, net.ParseIP(badIP), mails.ZeroAddress)
+		result, err := hook(context.TODO(), false, net.ParseIP(badIP), mails.ZeroAddress)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.True(t, result.Reject)
@@ -55,7 +57,7 @@ func TestDnsblHook(t *testing.T) {
 	})
 
 	t.Run("GoodRecord", func(t *testing.T) {
-		result, err := hook(false, net.ParseIP(goodIP), mails.ZeroAddress)
+		result, err := hook(context.TODO(), false, net.ParseIP(goodIP), mails.ZeroAddress)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.False(t, result.Reject)
@@ -63,7 +65,7 @@ func TestDnsblHook(t *testing.T) {
 	})
 
 	t.Run("Submission", func(t *testing.T) {
-		result, err := hook(true, net.ParseIP(badIP), mails.ZeroAddress)
+		result, err := hook(context.TODO(), true, net.ParseIP(badIP), mails.ZeroAddress)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.False(t, result.Reject)

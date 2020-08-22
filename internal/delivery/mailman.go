@@ -20,8 +20,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
@@ -53,7 +52,7 @@ func NewMailman(
 // mails are queued for delivery. Because of the queue errors during outbound
 // delivery are not known at this point.
 func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content io.Reader) error {
-	id, size, err := m.blobs.Write(content)
+	id, size, err := m.blobs.Write(ctx, content)
 	if err != nil {
 		return err
 	}
@@ -63,7 +62,7 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 		return err
 	}
 
-	defer tx.RollbackWith(m.rollbackBlob(id))
+	defer tx.RollbackWith(m.rollbackBlob(ctx, id))
 
 	mail := storage.Mail{
 		ID:         id,
@@ -72,14 +71,18 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 		Size:       size,
 	}
 
-	logrus.Infof("delivering %q to %d recipients", id, len(envelope.To))
+	log.InfoContext(ctx).
+		Stringer("from", envelope.From).
+		Int("recipients", len(envelope.To)).
+		Str("mail", id).
+		Msg("delivering mail to recipients")
 
 	if err := queries.InsertMail(tx, &mail); err != nil {
 		return err
 	}
 
 	for _, to := range envelope.To {
-		if err := m.deliverToRecipient(tx, to, &mail); err != nil {
+		if err := m.deliverToRecipient(ctx, tx, to, &mail); err != nil {
 			return err
 		}
 	}
@@ -90,12 +93,17 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 // rollbackBlob is used to rollback the mail blob, if an error occurs during delivery. Further
 // errors happening inside of rollbackBlob are logged but not handled, because we do not want to
 // shadow the original cause of the rollback.
-func (m *Mailman) rollbackBlob(id string) func() {
+func (m *Mailman) rollbackBlob(ctx context.Context, id string) func() {
 	return func() {
-		logrus.Info("an error occured during delivery, rolling back")
+		log.ErrorContext(ctx).
+			Str("mail", id).
+			Msg("an error occured during delivery, rolling back")
 
-		if err := m.blobs.Delete(id); err != nil {
-			logrus.Warnf("could not delete blob %q", id)
+		if err := m.blobs.Delete(ctx, id); err != nil {
+			log.ErrorContext(ctx).
+				Str("mail", id).
+				Err(err).
+				Msg("could not delete mail blob")
 		}
 	}
 }
@@ -104,7 +112,7 @@ func (m *Mailman) rollbackBlob(id string) func() {
 // accordingly. If local delivery fails because of a unique constraint, no
 // error is returned. This can only occur when multiple addresses point to the
 // same mailbox, in which case we just avoid duplicate entries.
-func (m *Mailman) deliverToRecipient(tx *storage.Tx, to mails.Address, mail *storage.Mail) error {
+func (m *Mailman) deliverToRecipient(ctx context.Context, tx *storage.Tx, to mails.Address, mail *storage.Mail) error {
 	result, err := m.addressbook.LookupTx(tx, to)
 	if err != nil {
 		return err
@@ -112,20 +120,34 @@ func (m *Mailman) deliverToRecipient(tx *storage.Tx, to mails.Address, mail *sto
 
 	switch {
 	case result.IsLocal && result.Mailbox != nil:
-		logrus.Debugf("adding %q to mailbox %d", mail.ID, result.Mailbox.ID)
+		log.InfoContext(ctx).
+			Str("mail", mail.ID).
+			Int64("mailbox", result.Mailbox.ID).
+			Stringer("to", to).
+			Msg("adding mail to mailbox")
 
 		err := queries.InsertMailboxEntry(tx, result.Mailbox, mail)
-		if !storage.IsErrUnique(err) {
-			return err
+		if storage.IsErrUnique(err) {
+			log.InfoContext(ctx).
+				Str("mail", mail.ID).
+				Int64("mailbox", result.Mailbox.ID).
+				Stringer("to", to).
+				Msg("mail already in mailbox. skipping")
+			return nil
 		}
+
+		return err
 
 	case !result.IsLocal:
 		// TODO: Add to outbound queue.
-		logrus.Debugf("queueing %q for outbound delivery to %q", mail.ID, to)
+		log.InfoContext(ctx).
+			Str("mail", mail.ID).
+			Stringer("to", to).
+			Msg("queueing mail for outbound delivery")
+
+		return nil
 
 	default:
 		return fmt.Errorf("could not deliver to unknown address %q", to)
 	}
-
-	return nil
 }

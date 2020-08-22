@@ -17,12 +17,14 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 func init() {
@@ -58,7 +60,7 @@ func NewCache() (*Cache, error) {
 
 // Write copies all the data from r into temporary storage. If the total size
 // exceeds the configured limit, the data will be written to disk.
-func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
+func (b *Cache) Write(ctx context.Context, r io.Reader) (*CacheEntry, error) {
 	memory := bytes.NewBuffer(nil)
 
 	n, err := io.Copy(memory, io.LimitReader(r, b.memoryLimit))
@@ -80,18 +82,28 @@ func (b *Cache) Write(r io.Reader) (*CacheEntry, error) {
 		return nil, err
 	}
 
-	logrus.Debugf("cache entry exceeding %d bytes, evading to file %q",
-		b.memoryLimit, id)
+	log.InfoContext(ctx).
+		Str("filename", id).
+		Int64("memoryLimit", b.memoryLimit).
+		Msg("cache entry exceeding size limit, evading to file")
 
 	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
-		logrus.Infof("could not write to cache file %q", id)
+		log.WarnContext(ctx).
+			Str("filename", id).
+			Msg("could not write to cache file")
 
 		if err := file.Close(); err != nil {
-			logrus.Warnf("could not close partial cache file %q: %v", id, err)
+			log.WarnContext(ctx).
+				Str("filename", id).
+				Err(err).
+				Msg("could not close partial cache file")
 		}
 
 		if err := b.fs.Remove(id); err != nil {
-			logrus.Warnf("could not remove partial cache file %q: %v", id, err)
+			log.WarnContext(ctx).
+				Str("filename", id).
+				Err(err).
+				Msg("could not remove partial cache file")
 		}
 
 		return nil, err
@@ -110,9 +122,11 @@ type CacheEntry struct {
 
 // Release deletes data on disk, that may have been written. If the size of the
 // cache entry is smaller than the memory limit, this is a noop.
-func (e *CacheEntry) Release() error {
+func (e *CacheEntry) Release(ctx context.Context) error {
 	if e.file != nil {
-		logrus.Debugf("removing cache file %q", e.id)
+		log.InfoContext(ctx).
+			Str("filename", e.id).
+			Msg("removing cache file")
 
 		if err := e.file.Close(); err != nil {
 			return err

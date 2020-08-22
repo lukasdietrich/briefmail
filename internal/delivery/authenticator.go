@@ -19,9 +19,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/lukasdietrich/briefmail/internal/crypto"
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
@@ -52,7 +51,10 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.M
 	mailbox, err := a.lookup(ctx, name)
 	if err != nil {
 		if isErrUnknownAddress(err) {
-			logrus.Infof("failed auth attempt for %q: unknown or invalid address", name)
+			log.WarnContext(ctx).
+				Bytes("name", name).
+				Msg("failed auth attempt: unknown or invalid address")
+
 			return nil, ErrWrongAddressPassword
 		}
 
@@ -61,7 +63,10 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.M
 
 	if err := crypto.Verify(mailbox, pass); err != nil {
 		if errors.Is(err, crypto.ErrPasswordMismatch) {
-			logrus.Infof("failed auth attempt for %q: wrong password", name)
+			log.WarnContext(ctx).
+				Bytes("name", name).
+				Msg("failed auth attempt: wrong password")
+
 			return nil, ErrWrongAddressPassword
 		}
 

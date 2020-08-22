@@ -26,9 +26,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/pop3"
 	"github.com/lukasdietrich/briefmail/internal/smtp"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
@@ -79,17 +79,17 @@ func (s *startCommand) handleSignals(servers *instanceManager) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
-	logrus.Info("waiting for shutdown signals..")
+	log.Info().Msg("waiting for shutdown signals..")
 	<-signals
 
-	logrus.Info("trying to shutdown gracefully")
+	log.Info().Msg("trying to shutdown gracefully")
 
 	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
 	go servers.shutdown(ctx, cancelFunc)
 
 	select {
 	case <-signals:
-		logrus.Info("shutting down forcefully now")
+		log.Info().Msg("shutting down forcefully now")
 		cancelFunc()
 
 	case <-ctx.Done():
@@ -113,7 +113,7 @@ func (i *instanceManager) shutdown(ctx context.Context, cancelFunc context.Cance
 	}
 
 	i.wg.Wait()
-	logrus.Info("all servers stopped gracefully")
+	log.Info().Msg("all servers stopped gracefully")
 	cancelFunc()
 }
 
@@ -136,13 +136,19 @@ func (i *instanceManager) start() error {
 		}
 
 		if len(configSlice) == 0 {
-			logrus.Warnf("%s is not configured", protoName)
+			log.Warn().
+				Str("protocol", protoName).
+				Msg("protocol is not configured")
+
 			continue
 		}
 
 		for _, config := range configSlice {
-			logrus.Infof("starting %s server on %q (tls=%t)",
-				protoName, config.Address, config.TLS)
+			log.Info().
+				Str("protocol", protoName).
+				Str("address", config.Address).
+				Bool("forceTLS", config.TLS).
+				Msg("starting server instance")
 
 			var tlsConfig *tls.Config
 			if config.TLS {
@@ -164,17 +170,24 @@ func (i *instanceManager) start() error {
 func (i *instanceManager) startInstance(server textproto.Server, addr string) {
 	if err := server.Listen(addr); err != nil {
 		if !errors.Is(err, textproto.ErrServerClosed) {
-			logrus.Fatal(err)
+			log.Fatal().
+				Str("address", addr).
+				Err(err).
+				Send()
 		}
 	}
 
-	logrus.Infof("server %s stopped", addr)
+	log.Info().
+		Str("address", addr).
+		Msg("server instance stopped")
 }
 
 // unmarshalServerConfigs reads the config for either "pop3" or "smtp" and
 // unmarshals it into a slice of serverConfig.
 func unmarshalServerConfigs(protoName string) ([]serverConfig, error) {
-	logrus.Debugf("reading %s configuration", protoName)
+	log.Info().
+		Str("protocol", protoName).
+		Msg("reading protocol configuration")
 
 	var configs []serverConfig
 	return configs, viper.UnmarshalKey(protoName, &configs)

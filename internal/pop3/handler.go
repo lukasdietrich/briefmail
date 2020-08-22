@@ -16,6 +16,7 @@
 package pop3
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"strconv"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
 
@@ -32,7 +34,7 @@ var (
 	errInvalidSyntax = errors.New("pop3: invalid syntax")
 )
 
-type handler func(*session, *command) error
+type handler func(context.Context, *session, *command) error
 
 // `USER` command as specified in RFC#1939
 //
@@ -40,7 +42,7 @@ type handler func(*session, *command) error
 func user() handler {
 	rOk := reply{true, "now the secret"}
 
-	return func(s *session, c *command) error {
+	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sInit, sUser) {
 			return errBadSequence
 		}
@@ -68,7 +70,7 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 		rLocked    = reply{false, "there is two of you?"}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sUser) {
 			return errBadSequence
 		}
@@ -79,7 +81,7 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 			return errInvalidSyntax
 		}
 
-		mailbox, err := authenticator.Auth(s.Context(), s.name, args[0])
+		mailbox, err := authenticator.Auth(ctx, s.name, args[0])
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
 				return s.send(&rWrongPass)
@@ -92,8 +94,12 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 			return s.send(&rLocked)
 		}
 
+		log.InfoContext(ctx).
+			Int64("mailbox", mailbox.ID).
+			Msg("locking mailbox")
+
 		s.mailbox = mailbox
-		s.inbox, err = inboxer.Inbox(s.Context(), mailbox)
+		s.inbox, err = inboxer.Inbox(ctx, mailbox)
 		if err != nil {
 			return err
 		}
@@ -108,13 +114,14 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 //
 //     "QUIT" CRLF
 func quit(inboxer *delivery.Inboxer) handler {
-	return func(s *session, _ *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
 		if s.state.in(sTransaction) {
-			if err := inboxer.Commit(s.Context(), s.mailbox, s.inbox); err != nil {
+			if err := inboxer.Commit(ctx, s.mailbox, s.inbox); err != nil {
 				return err
 			}
 		}
 
+		log.DebugContext(ctx).Msg("closing session")
 		return errCloseSession
 	}
 }
@@ -123,7 +130,7 @@ func quit(inboxer *delivery.Inboxer) handler {
 //
 //     "STAT" CRLF
 func stat() handler {
-	return func(s *session, _ *command) error {
+	return func(_ context.Context, s *session, _ *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
@@ -141,7 +148,7 @@ func stat() handler {
 func list() handler {
 	rNoMessage := reply{false, "no such message"}
 
-	return func(s *session, c *command) error {
+	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
@@ -201,7 +208,7 @@ func uidl() handler {
 		rNoMessage = reply{false, "no such message"}
 	)
 
-	return func(s *session, c *command) error {
+	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
@@ -258,7 +265,7 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 		rNoMessage = reply{false, "no such message"}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
@@ -284,7 +291,13 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 			return err
 		}
 
-		r, err := blobs.Reader(s.inbox.Mails[index].ID)
+		id := s.inbox.Mails[index].ID
+
+		log.InfoContext(ctx).
+			Str("mail", id).
+			Msg("retrieving mail")
+
+		r, err := blobs.Reader(id)
 		if err != nil {
 			return err
 		}
@@ -310,7 +323,7 @@ func dele() handler {
 		rNoMessage = reply{false, "no such message"}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
@@ -333,6 +346,11 @@ func dele() handler {
 		}
 
 		s.inbox.Mark(index)
+
+		log.InfoContext(ctx).
+			Int("index", index).
+			Msg("marking mail for deletion")
+
 		return s.send(&rOk)
 	}
 }
@@ -343,7 +361,7 @@ func dele() handler {
 func noop() handler {
 	rOk := reply{true, "what did you expect?"}
 
-	return func(s *session, _ *command) error {
+	return func(_ context.Context, s *session, _ *command) error {
 		return s.send(&rOk)
 	}
 }
@@ -354,12 +372,14 @@ func noop() handler {
 func rset() handler {
 	rOk := reply{true, "lost some intel during time travel"}
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
 		}
 
 		s.inbox.Reset()
+
+		log.InfoContext(ctx).Msg("resetting transaction")
 		return s.send(&rOk)
 	}
 }
@@ -374,7 +394,7 @@ func stls(config *tls.Config) handler {
 		rAlreadyTLS     = reply{false, "what are you afraid of?"}
 	)
 
-	return func(s *session, _ *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
 		if config == nil {
 			return s.send(&rTLSUnavailable)
 		}
@@ -387,6 +407,7 @@ func stls(config *tls.Config) handler {
 			return err
 		}
 
+		log.InfoContext(ctx).Msg("upgrading to tls")
 		return s.UpgradeTLS(config)
 	}
 }
@@ -399,7 +420,7 @@ func capa(capabilities ...string) handler {
 		rOk = reply{true, "I can do some things"}
 	)
 
-	return func(s *session, _ *command) error {
+	return func(_ context.Context, s *session, _ *command) error {
 		if err := s.send(&rOk); err != nil {
 			return err
 		}

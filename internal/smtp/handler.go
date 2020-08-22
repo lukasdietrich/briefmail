@@ -17,6 +17,7 @@ package smtp
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -28,6 +29,7 @@ import (
 	"time"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
@@ -38,7 +40,7 @@ var (
 	errBadSequence  = errors.New("smtp: bad sequence of commands")
 )
 
-type handler func(*session, *command) error
+type handler func(context.Context, *session, *command) error
 
 // `HELO` command as specified in RFC#5321 4.1.1.1
 //
@@ -46,9 +48,13 @@ type handler func(*session, *command) error
 func helo(hostname string) handler {
 	rReady := reply{250, hostname}
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		s.state = sHelo
 		s.envelope.Helo = string(c.tail)
+
+		log.DebugContext(ctx).
+			Str("hostname", s.envelope.Helo).
+			Msg("resetting transaction state")
 
 		return s.send(&rReady)
 	}
@@ -61,9 +67,13 @@ func ehlo(hostname string, extensions ...string) handler {
 	extensions = append(extensions, "8BITMIME")
 
 	// nolint:errcheck
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		s.state = sHelo
 		s.envelope.Helo = string(c.tail)
+
+		log.DebugContext(ctx).
+			Str("hostname", s.envelope.Helo).
+			Msg("resetting transaction state")
 
 		s.SetWriteTimeout(time.Minute * 5)
 
@@ -91,7 +101,7 @@ func ehlo(hostname string, extensions ...string) handler {
 func noop() handler {
 	rOk := reply{250, "nothing happened. as expected"}
 
-	return func(s *session, _ *command) error {
+	return func(_ context.Context, s *session, _ *command) error {
 		return s.send(&rOk)
 	}
 }
@@ -102,7 +112,7 @@ func noop() handler {
 func rset() handler {
 	rOk := reply{250, "everything gone. pinky promise"}
 
-	return func(s *session, _ *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
 		if !s.state.in(sInit, sHelo) {
 			s.state = sHelo
 		}
@@ -110,6 +120,8 @@ func rset() handler {
 		s.envelope.From = mails.ZeroAddress
 		s.envelope.To = nil
 		s.headers = nil
+
+		log.DebugContext(ctx).Msg("resetting transaction state")
 
 		return s.send(&rOk)
 	}
@@ -121,7 +133,7 @@ func rset() handler {
 func vrfy() handler {
 	rMaybe := reply{252, "maybe, maybe not? who knows for sure"}
 
-	return func(s *session, _ *command) error {
+	return func(_ context.Context, s *session, _ *command) error {
 		return s.send(&rMaybe)
 	}
 }
@@ -130,7 +142,8 @@ func vrfy() handler {
 //
 //     "QUIT" CRLF
 func quit() handler {
-	return func(*session, *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
+		log.DebugContext(ctx).Msg("closing session")
 		return errCloseSession
 	}
 }
@@ -145,7 +158,7 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 		rAuth = reply{530, "that does not sound like you"}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo, sMail) {
 			return errBadSequence
 		}
@@ -160,7 +173,7 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			return err
 		}
 
-		origin, err := addressbook.Lookup(s.Context(), from)
+		origin, err := addressbook.Lookup(ctx, from)
 		if err != nil {
 			return err
 		}
@@ -170,12 +183,16 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			// which the current user owns
 
 			if !origin.IsLocal || origin.Mailbox.ID != s.mailbox.ID {
+				log.WarnContext(ctx).
+					Int64("mailbox", s.mailbox.ID).
+					Msg("authenticated connection trying to send as someone else")
 				return s.send(&rAuth)
 			}
 		} else {
 			// unauthenticated connections must send mails from a remote address
 
 			if origin.IsLocal {
+				log.WarnContext(ctx).Msg("attempted submission without authentication")
 				return s.send(&rAuth)
 			}
 		}
@@ -185,10 +202,17 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			if size, ok := params["SIZE"]; ok {
 				isize, err := strconv.ParseInt(size, 10, 64)
 				if err != nil {
+					log.DebugContext(ctx).
+						Str("size", size).
+						Msg("invalid SIZE parameter")
 					return errCommandSyntax
 				}
 
 				if isize > maxSize {
+					log.InfoContext(ctx).
+						Int64("size", isize).
+						Int64("maxSize", maxSize).
+						Msg("requested SIZE parameter execeeding maximum configured size")
 					return s.send(&rSize)
 				}
 			}
@@ -197,7 +221,7 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 		var headers []hook.HeaderField
 
 		for _, hook := range hooks {
-			result, err := hook(s.isSubmission(), s.RemoteAddr(), from)
+			result, err := hook(ctx, s.isSubmission(), s.RemoteAddr(), from)
 			if err != nil {
 				return err
 			}
@@ -213,6 +237,10 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 		s.envelope.From = from
 		s.state = sMail
 
+		log.DebugContext(ctx).
+			Str("from", arg).
+			Msg("beginning mail transaction")
+
 		return s.send(&rOk)
 	}
 }
@@ -227,13 +255,9 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 		rInvalidRecipient  = reply{550, "never heard of that person."}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sMail, sRcpt) {
 			return errBadSequence
-		}
-
-		if len(s.envelope.To) > 100 {
-			return s.send(&rTooManyRecipients)
 		}
 
 		arg, _, err := c.args("TO")
@@ -241,12 +265,19 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 			return err
 		}
 
+		if len(s.envelope.To) > 100 {
+			log.DebugContext(ctx).
+				Int("recipientCount", len(s.envelope.To)).
+				Msg("too many recipients")
+			return s.send(&rTooManyRecipients)
+		}
+
 		to, err := mails.ParseUnicode(arg)
 		if err != nil {
 			return err
 		}
 
-		destination, err := addressbook.Lookup(s.Context(), to)
+		destination, err := addressbook.Lookup(ctx, to)
 		if err != nil {
 			return err
 		}
@@ -257,6 +288,10 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 
 		s.envelope.To = append(s.envelope.To, to)
 		s.state = sRcpt
+
+		log.DebugContext(ctx).
+			Str("to", arg).
+			Msg("recipient added")
 
 		return s.send(&rOk)
 	}
@@ -272,10 +307,12 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 		rSize = reply{552, "I am already full, thanks"}
 	)
 
-	return func(s *session, _ *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
 		if !s.state.in(sRcpt) {
 			return errBadSequence
 		}
+
+		log.DebugContext(ctx).Msg("receiving mail content")
 
 		if err := s.send(&rData); err != nil {
 			return err
@@ -306,7 +343,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 			prepender.prepend(header.Key, header.Value)
 		}
 
-		entry, err := cache.Write(prepender.reader(lr))
+		entry, err := cache.Write(ctx, prepender.reader(lr))
 		if err != nil {
 			if err == errReaderLimitReached {
 				// discard remaining bytes (but not forever) to flush
@@ -322,7 +359,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 			return err
 		}
 
-		defer entry.Release()
+		defer entry.Release(ctx)
 
 		var headers []hook.HeaderField
 
@@ -332,7 +369,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 				return err
 			}
 
-			result, err := hook(s.isSubmission(), r)
+			result, err := hook(ctx, s.isSubmission(), r)
 			if err != nil {
 				return err
 			}
@@ -357,12 +394,11 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 
 		content := prepender.reader(r)
 
-		if err := mailman.Deliver(s.Context(), s.envelope, content); err != nil {
+		log.InfoContext(ctx).Msg("committing mail transaction")
+
+		if err := mailman.Deliver(ctx, s.envelope, content); err != nil {
 			return err
 		}
-
-		log.WithField("from", s.envelope.From).
-			Debug("mail successfully received")
 
 		s.state = sHelo
 		return s.send(&rOk)
@@ -379,7 +415,7 @@ func starttls(config *tls.Config) handler {
 		rAlreadyTLS     = reply{454, "what are you afraid of?"}
 	)
 
-	return func(s *session, _ *command) error {
+	return func(ctx context.Context, s *session, _ *command) error {
 		if config == nil {
 			return s.send(&rTLSUnavailable)
 		}
@@ -407,7 +443,7 @@ func auth(authenticator *delivery.Authenticator) handler {
 		rFail     = reply{535, "Solid attempt."}
 	)
 
-	return func(s *session, c *command) error {
+	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo) {
 			return errBadSequence
 		}
@@ -481,7 +517,7 @@ func auth(authenticator *delivery.Authenticator) handler {
 			return errCommandSyntax
 		}
 
-		mailbox, err := authenticator.Auth(s.Context(), name, pass)
+		mailbox, err := authenticator.Auth(ctx, name, pass)
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
 				return s.send(&rFail)

@@ -23,9 +23,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 const usageText = `
@@ -55,25 +57,41 @@ func init() {
 }
 
 func main() {
-	var configFilename string
+	var (
+		configFilename      string
+		enableConsoleLogger bool
+	)
 
 	flags := pflag.NewFlagSet("briefmail", pflag.ContinueOnError)
-	flags.StringVarP(&configFilename, "config", "c", "", "Path to a configuration file")
 	flags.Usage = printUsage(flags)
+
+	flags.StringVarP(&configFilename,
+		"config", "c",
+		"",
+		"Path to a configuration file")
+
+	flags.BoolVar(&enableConsoleLogger,
+		"pretty-console-logger",
+		false,
+		"Enable pretty, but inefficient console logger")
 
 	if err := flags.Parse(os.Args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
 			return
 		}
 
-		logrus.Fatal(err)
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	if enableConsoleLogger {
+		log.Logger = log.Logger.Output(zerolog.NewConsoleWriter())
 	}
 
 	switch commandName := flags.Arg(1); commandName {
 	case "start", "shell":
 		setupConfig(configFilename)
-		setupLogger()
-		printConfig()
+		setupLogLevel()
 		runCommand(commandName)
 	default:
 		flags.Usage()
@@ -92,17 +110,22 @@ func runCommand(commandName string) {
 
 	switch commandName {
 	case "start":
+		printConfig()
 		cmd, err = newStartCommand()
 	case "shell":
 		cmd, err = newShellCommand()
 	}
 
 	if err != nil {
-		logrus.Fatalf("could not initialize the application: %v", err)
+		log.Fatal().
+			Err(err).
+			Msg("could not initialize the application")
 	}
 
 	if err := cmd.run(); err != nil {
-		logrus.Fatalf("%v", err)
+		log.Fatal().
+			Err(err).
+			Msg("error during execution")
 	}
 }
 
@@ -114,16 +137,6 @@ func printUsage(flags *pflag.FlagSet) func() {
 	}
 }
 
-func setupLogger() {
-	logLevel, err := logrus.ParseLevel(viper.GetString("log.level"))
-	if err != nil {
-		logrus.Fatalf("unknown log level: %v", err)
-	}
-
-	logrus.Infof("setting log level to %q", logLevel)
-	logrus.SetLevel(logLevel)
-}
-
 func setupConfig(filename string) {
 	viper.SetTypeByDefaultValue(true)
 	viper.AutomaticEnv()
@@ -133,19 +146,26 @@ func setupConfig(filename string) {
 	if filename != "" {
 		readConfig(filename)
 	} else {
-		logrus.Info("no config file provided. using environment only")
+		log.Info().Msg("no config file provided. using environment only")
 	}
 }
 
 func readConfig(filename string) {
-	logrus.Infof("loading configuration from %q", filename)
+	log.Info().
+		Str("filename", filename).
+		Msg("loading configuration from file")
+
 	viper.SetConfigFile(filename)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if os.IsNotExist(err) {
-			logrus.Warnf("configuration file missing: %v", err)
+			log.Fatal().
+				Err(err).
+				Msg("configuration file missing")
 		} else {
-			logrus.Fatalf("could not load configuration: %v", err)
+			log.Fatal().
+				Err(err).
+				Msg("could not load configuration")
 		}
 	}
 }
@@ -156,6 +176,23 @@ func printConfig() {
 
 	for _, key := range keys {
 		v, _ := json.Marshal(viper.Get(key))
-		logrus.Debugf("%s = %s", key, v)
+		log.Debug().
+			Str("key", key).
+			RawJSON("value", v).
+			Msg("configuration")
 	}
+}
+
+func setupLogLevel() {
+	logLevelName := viper.GetString("log.level")
+	logLevelName = strings.ToLower(logLevelName)
+
+	logLevel, err := zerolog.ParseLevel(logLevelName)
+	if err != nil {
+		log.Fatal().
+			Err(err).
+			Msg("unknown log level")
+	}
+
+	zerolog.SetGlobalLevel(logLevel)
 }

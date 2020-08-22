@@ -54,7 +54,7 @@ func (c *Cleaner) Clean(ctx context.Context) error {
 	}
 
 	for _, mail := range mails {
-		if err := c.deleteMail(tx, &mail); err != nil {
+		if err := c.deleteMail(ctx, tx, &mail); err != nil {
 			return err
 		}
 	}
@@ -62,8 +62,8 @@ func (c *Cleaner) Clean(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (c *Cleaner) deleteMail(tx *storage.Tx, mail *storage.Mail) error {
-	if err := c.blobs.Delete(mail.ID); err != nil {
+func (c *Cleaner) deleteMail(ctx context.Context, tx *storage.Tx, mail *storage.Mail) error {
+	if err := c.blobs.Delete(ctx, mail.ID); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return err
 		}

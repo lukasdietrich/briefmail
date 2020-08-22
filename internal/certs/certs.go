@@ -21,8 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 const (
@@ -89,7 +90,9 @@ func NewTLSConfig() (*tls.Config, error) {
 				lastTime = newTime
 				lastCert = newCert
 
-				logrus.Debugf("new certificate loaded (updated %s)", newTime)
+				log.Info().
+					Time("updateTime", newTime).
+					Msg("new certificate loaded")
 			}
 
 			return lastCert, nil

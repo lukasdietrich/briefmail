@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"math/rand"
 	"testing"
@@ -45,7 +46,7 @@ func TestBlobs(t *testing.T) {
 
 	t.Run("Write", func(t *testing.T) {
 		var n int64
-		id, n, err = blobs.Write(bytes.NewReader(data))
+		id, n, err = blobs.Write(context.TODO(), bytes.NewReader(data))
 		assert.NoError(t, err)
 		assert.NotEqual(t, "", id)
 		assert.EqualValues(t, len(data), n)
@@ -72,7 +73,7 @@ func TestBlobs(t *testing.T) {
 	})
 
 	t.Run("Delete", func(t *testing.T) {
-		assert.NoError(t, blobs.Delete(id))
-		assert.Error(t, blobs.Delete(id))
+		assert.NoError(t, blobs.Delete(context.TODO(), id))
+		assert.Error(t, blobs.Delete(context.TODO(), id))
 	})
 }

@@ -2,8 +2,8 @@
   # The local hostname which is used to greet incoming requests
   hostname   = "localhost"
 
-[addressbook]
-  filename = "_example/addressbook.toml"
+[log]
+  level      = "debug"
 
 [mail]
   # Limit the maximum accepted mail size to be 25 MB
@@ -22,16 +22,16 @@
   server     = "zen.spamhaus.org"
 
 [tls]
-  source     = "files"
+  # "none" | "files" | "traefik"
+  source     = "none"
 
-  # Use standard pem encoded files to load the certificate
 [tls.files]
+  # Use standard pem encoded files to load the certificate
   crt        = "cert/briefmail.crt"
   key        = "cert/briefmail.key"
 
-  # Extract a certificate from <https://traefik.io/>
-  # source     = "traefik"
 [tls.traefik]
+  # Extract a certificate from <https://traefik.io/>
   acme       = "/etc/traefik/acme.json"
   domain     = "localhost"
 

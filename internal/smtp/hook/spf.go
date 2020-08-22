@@ -16,30 +16,39 @@
 package hook
 
 import (
+	"context"
 	"fmt"
 	"net"
 
-	"github.com/sirupsen/logrus"
 	"github.com/zaccone/spf"
 
+	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func makeSpfHook() FromHook {
-	logrus.Debug("hook: registering spf hook")
+	log.Info().Msg("registering spf hook")
 
-	return func(submission bool, ip net.IP, from mails.Address) (*Result, error) {
+	return func(ctx context.Context, submission bool, ip net.IP, from mails.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil
 		}
 
-		logrus.Debugf("looking up spf for %q", from)
+		log.InfoContext(ctx).
+			Stringer("from", from).
+			Msg("looking up spf")
 
 		result, _, err := spf.CheckHost(ip, from.Domain(), from.String())
 		if err != nil {
-			logrus.Errorf("could not check spf for %q: %v", from, err)
+			log.InfoContext(ctx).
+				Stringer("from", from).
+				Err(err).
+				Msg("could not check spf")
 		} else {
-			logrus.Infof("spf result for %q: %q", from, result)
+			log.InfoContext(ctx).
+				Stringer("from", from).
+				Stringer("result", result).
+				Msg("spf result")
 		}
 
 		if result == spf.Fail {
