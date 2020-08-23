@@ -17,16 +17,18 @@ package pop3
 
 import (
 	"bytes"
+	"strconv"
+	"strings"
 
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
 // command represents a command-line of the form:
 //
-//     <head> <SP> <tail> <CR> <LF>
+//     <name> <SP> [<arg> [<SP> <arg>]*] <CR> <LF>
 type command struct {
-	head []byte
-	tail []byte
+	name string
+	args [][]byte
 }
 
 func (c *command) readFrom(r textproto.Reader) error {
@@ -43,18 +45,25 @@ func (c *command) parse(line []byte) {
 	space := bytes.IndexRune(line, ' ')
 
 	if space < 0 {
-		c.head = line
-		c.tail = nil
+		c.name = string(line)
+		c.args = nil
 	} else {
-		c.head = line[:space]
-		c.tail = line[space+1:]
+		c.name = string(line[:space])
+		c.args = bytes.Fields(line[space+1:])
 	}
+
+	c.name = strings.ToLower(c.name)
 }
 
-func (c *command) args() [][]byte {
-	if len(c.tail) == 0 {
-		return nil
+func (c *command) parseIndexArg(arg int) (int, error) {
+	if len(c.args) <= arg {
+		return -1, errInvalidSyntax
 	}
 
-	return bytes.Fields(c.tail)
+	n, err := strconv.ParseInt(string(c.args[arg]), 10, 64)
+	if err != nil {
+		return -1, errInvalidSyntax
+	}
+
+	return int(n - 1), nil
 }

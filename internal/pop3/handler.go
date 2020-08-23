@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strconv"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/log"
@@ -47,13 +46,11 @@ func user() handler {
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		if len(args) != 1 {
+		if len(c.args) != 1 {
 			return errInvalidSyntax
 		}
 
-		s.name = args[0]
+		s.name = c.args[0]
 		s.state = sUser
 
 		return s.send(&rOk)
@@ -75,13 +72,11 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		if len(args) != 1 {
+		if len(c.args) != 1 {
 			return errInvalidSyntax
 		}
 
-		mailbox, err := authenticator.Auth(ctx, s.name, args[0])
+		mailbox, err := authenticator.Auth(ctx, s.name, c.args[0])
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
 				return s.send(&rWrongPass)
@@ -153,9 +148,7 @@ func list() handler {
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		switch len(args) {
+		switch len(c.args) {
 		case 0:
 			s.send(&reply{
 				true,
@@ -177,22 +170,17 @@ func list() handler {
 			return s.Flush()
 
 		case 1:
-			n, err := strconv.ParseInt(string(args[0]), 10, 64)
+			index, err := c.parseIndexArg(0)
 			if err != nil {
 				return errInvalidSyntax
 			}
 
-			index := int(n - 1)
-
-			if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
+			mail, ok := s.inbox.Mail(index)
+			if !ok {
 				return s.send(&rNoMessage)
 			}
 
-			return s.send(&reply{
-				true,
-				fmt.Sprintf("%d %d", n, s.inbox.Mails[index].Size),
-			})
-
+			return s.send(&reply{true, fmt.Sprintf("%d %d", index+1, mail.Size)})
 		default:
 			return errInvalidSyntax
 		}
@@ -213,9 +201,7 @@ func uidl() handler {
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		switch len(args) {
+		switch len(c.args) {
 		case 0:
 			s.send(&rOk)
 
@@ -234,21 +220,17 @@ func uidl() handler {
 			return s.Flush()
 
 		case 1:
-			n, err := strconv.ParseInt(string(args[0]), 10, 64)
+			index, err := c.parseIndexArg(0)
 			if err != nil {
 				return errInvalidSyntax
 			}
 
-			index := int(n - 1)
-
-			if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
+			mail, ok := s.inbox.Mail(index)
+			if !ok {
 				return s.send(&rNoMessage)
 			}
 
-			return s.send(&reply{
-				true,
-				fmt.Sprintf("%d %s", n, s.inbox.Mails[index].ID),
-			})
+			return s.send(&reply{true, fmt.Sprintf("%d %s", index+1, mail.ID)})
 
 		default:
 			return errInvalidSyntax
@@ -270,20 +252,17 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		if len(args) != 1 {
+		if len(c.args) != 1 {
 			return errInvalidSyntax
 		}
 
-		n, err := strconv.ParseInt(string(args[0]), 10, 64)
+		index, err := c.parseIndexArg(0)
 		if err != nil {
 			return errInvalidSyntax
 		}
 
-		index := int(n - 1)
-
-		if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
+		mail, ok := s.inbox.Mail(index)
+		if !ok {
 			return s.send(&rNoMessage)
 		}
 
@@ -291,19 +270,16 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 			return err
 		}
 
-		id := s.inbox.Mails[index].ID
-
 		log.InfoContext(ctx).
-			Str("mail", id).
+			Str("mail", mail.ID).
 			Msg("retrieving mail")
 
-		r, err := blobs.Reader(id)
+		r, err := blobs.Reader(mail.ID)
 		if err != nil {
 			return err
 		}
 
 		w := s.DotWriter()
-
 		_, err = io.Copy(w, r)
 
 		r.Close()
@@ -328,20 +304,16 @@ func dele() handler {
 			return errBadSequence
 		}
 
-		args := c.args()
-
-		if len(args) != 1 {
+		if len(c.args) != 1 {
 			return errInvalidSyntax
 		}
 
-		n, err := strconv.ParseInt(string(args[0]), 10, 64)
+		index, err := c.parseIndexArg(0)
 		if err != nil {
 			return errInvalidSyntax
 		}
 
-		index := int(n - 1)
-
-		if index < 0 || index >= len(s.inbox.Mails) || s.inbox.IsMarked(index) {
+		if _, ok := s.inbox.Mail(index); !ok {
 			return s.send(&rNoMessage)
 		}
 

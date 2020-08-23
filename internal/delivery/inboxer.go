@@ -152,3 +152,12 @@ func (i *Inbox) Size() int64 {
 func (i *Inbox) Count() int {
 	return len(i.Mails) - len(i.marks)
 }
+
+// Mail returns the mail if it exists and is not yet marked.
+func (i *Inbox) Mail(index int) (storage.Mail, bool) {
+	if index >= 0 && index < len(i.Mails) && !i.IsMarked(index) {
+		return i.Mails[index], true
+	}
+
+	return storage.Mail{}, false
+}

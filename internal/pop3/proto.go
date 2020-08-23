@@ -16,7 +16,6 @@
 package pop3
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -126,9 +125,8 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 			return err
 		}
 
-		commandName := string(bytes.ToLower(cmd.head))
-		ctx := log.WithCommand(ctx, commandName)
-		h, ok := p.handlerMap[commandName]
+		ctx := log.WithCommand(ctx, cmd.name)
+		h, ok := p.handlerMap[cmd.name]
 
 		if !ok {
 			log.DebugContext(ctx).Msg("command not implemented")
