@@ -152,12 +152,6 @@ func quit() handler {
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
 func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
-	var (
-		rOk   = reply{250, "noted."}
-		rSize = reply{552, "bit too much"}
-		rAuth = reply{530, "that does not sound like you"}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo, sMail) {
 			return errBadSequence
@@ -178,62 +172,18 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			return err
 		}
 
-		if s.isSubmission() {
-			// authenticated connections must send mails from a local address,
-			// which the current user owns
-
-			if !origin.IsLocal || origin.Mailbox.ID != s.mailbox.ID {
-				log.WarnContext(ctx).
-					Int64("mailbox", s.mailbox.ID).
-					Msg("authenticated connection trying to send as someone else")
-				return s.send(&rAuth)
-			}
-		} else {
-			// unauthenticated connections must send mails from a remote address
-
-			if origin.IsLocal {
-				log.WarnContext(ctx).Msg("attempted submission without authentication")
-				return s.send(&rAuth)
-			}
+		if err := checkOrigin(ctx, s, origin); err != nil {
+			return err
 		}
 
-		// see RFC#1870 "6. The extended MAIL command"
-		if maxSize > 0 {
-			if size, ok := params["SIZE"]; ok {
-				isize, err := strconv.ParseInt(size, 10, 64)
-				if err != nil {
-					log.DebugContext(ctx).
-						Str("size", size).
-						Msg("invalid SIZE parameter")
-					return errCommandSyntax
-				}
-
-				if isize > maxSize {
-					log.InfoContext(ctx).
-						Int64("size", isize).
-						Int64("maxSize", maxSize).
-						Msg("requested SIZE parameter execeeding maximum configured size")
-					return s.send(&rSize)
-				}
-			}
+		if err := checkMaxSize(ctx, s, params, maxSize); err != nil {
+			return err
 		}
 
-		var headers []hook.HeaderField
-
-		for _, hook := range hooks {
-			result, err := hook(ctx, s.isSubmission(), s.RemoteAddr(), from)
-			if err != nil {
-				return err
-			}
-
-			if result.Reject {
-				return s.send(&reply{result.Code, result.Text})
-			}
-
-			headers = append(headers, result.Headers...)
+		if err := execFromHooks(ctx, s, from, hooks); err != nil {
+			return err
 		}
 
-		s.headers = headers
 		s.envelope.From = from
 		s.state = sMail
 
@@ -241,8 +191,79 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			Str("from", arg).
 			Msg("beginning mail transaction")
 
-		return s.send(&rOk)
+		return s.send(&reply{250, "noted."})
 	}
+}
+
+func checkOrigin(ctx context.Context, s *session, origin *delivery.LookupResult) error {
+	if s.isSubmission() {
+		// authenticated connections must send mails from a local address,
+		// which the current user owns
+
+		if !origin.IsLocal || origin.Mailbox.ID != s.mailbox.ID {
+			log.WarnContext(ctx).
+				Int64("mailbox", s.mailbox.ID).
+				Msg("authenticated connection trying to send as someone else")
+
+			return s.send(&reply{550, "that does not sound like you."})
+		}
+	}
+
+	// unauthenticated connections must send mails from a remote address
+	if origin.IsLocal {
+		log.WarnContext(ctx).Msg("attempted submission without authentication")
+		return s.send(&reply{550, "submissions must be authenticated."})
+	}
+
+	return nil
+}
+
+func checkMaxSize(ctx context.Context, s *session, params map[string]string, maxSize int64) error {
+	// see RFC#1870 "6. The extended MAIL command"
+
+	if maxSize == 0 {
+		return nil
+	}
+
+	if sizeParam, ok := params["SIZE"]; ok {
+		size, err := strconv.ParseInt(sizeParam, 10, 64)
+		if err != nil {
+			log.DebugContext(ctx).
+				Str("size", sizeParam).
+				Msg("invalid SIZE parameter")
+			return errCommandSyntax
+		}
+
+		if size > maxSize {
+			log.InfoContext(ctx).
+				Int64("size", size).
+				Int64("maxSize", maxSize).
+				Msg("requested SIZE parameter execeeding maximum configured size")
+			return s.send(&reply{552, "that is a bit too much"})
+		}
+	}
+
+	return nil
+}
+
+func execFromHooks(ctx context.Context, s *session, from mails.Address, hooks []hook.FromHook) error {
+	var headers []hook.HeaderField
+
+	for _, hook := range hooks {
+		result, err := hook(ctx, s.isSubmission(), s.RemoteAddr(), from)
+		if err != nil {
+			return err
+		}
+
+		if result.Reject {
+			return s.send(&reply{result.Code, result.Text})
+		}
+
+		headers = append(headers, result.Headers...)
+	}
+
+	s.headers = headers
+	return nil
 }
 
 // `RCPT` command as specified in RFC#5321 4.1.1.3
@@ -282,7 +303,7 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 			return err
 		}
 
-		if (s.isSubmission() && !destination.IsLocal) || destination.Mailbox == nil {
+		if !isValidDestination(s, destination) {
 			return s.send(&rInvalidRecipient)
 		}
 
@@ -295,6 +316,16 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 
 		return s.send(&rOk)
 	}
+}
+
+func isValidDestination(s *session, destination *delivery.LookupResult) bool {
+	if destination.IsLocal {
+		// when the destination is a local mailbox, the mailbox must exist.
+		return destination.Mailbox != nil
+	}
+
+	// when the destination is outbound, it must be an authenticated connection (= submission)
+	return s.isSubmission()
 }
 
 // `DATA` command as specified in RFC#5321 4.1.1.4
@@ -437,10 +468,8 @@ func starttls(config *tls.Config) handler {
 //     "AUTH" <Mechanism> [ Payload ] CRLF
 func auth(authenticator *delivery.Authenticator) handler {
 	var (
-		rUsername = reply{334, "VXNlcm5hbWU6"}
-		rPassword = reply{334, "UGFzc3dvcmQ6"}
-		rOk       = reply{235, "I was sure I saw you before."}
-		rFail     = reply{535, "Solid attempt."}
+		rOk   = reply{235, "I was sure I saw you before."}
+		rFail = reply{535, "Solid attempt."}
 	)
 
 	return func(ctx context.Context, s *session, c *command) error {
@@ -448,73 +477,9 @@ func auth(authenticator *delivery.Authenticator) handler {
 			return errBadSequence
 		}
 
-		var (
-			fields     = bytes.Fields(c.tail)
-			name, pass []byte
-		)
-
-		if len(fields) < 1 {
-			return errCommandSyntax
-		}
-
-		switch strings.ToUpper(string(fields[0])) {
-		case "PLAIN":
-			if len(fields) != 2 {
-				return errCommandSyntax
-			}
-
-			b, err := base64.StdEncoding.DecodeString(string(fields[1]))
-			if err != nil {
-				return errCommandSyntax
-			}
-
-			fields = bytes.Split(b, []byte{0})
-			if len(fields) != 3 {
-				return errCommandSyntax
-			}
-
-			if len(fields[0]) > 0 {
-				if !bytes.Equal(fields[0], fields[1]) {
-					return s.send(&rFail)
-				}
-			}
-
-			name = fields[1]
-			pass = fields[2]
-
-		case "LOGIN":
-			if err := s.send(&rUsername); err != nil {
-				return err
-			}
-
-			b, err := s.ReadLine()
-			if err != nil {
-				return err
-			}
-
-			b, err = base64.StdEncoding.DecodeString(string(b))
-			if err != nil {
-				return errCommandSyntax
-			}
-
-			name = b
-
-			if err := s.send(&rPassword); err != nil {
-				return err
-			}
-
-			b, err = s.ReadLine()
-			if err != nil {
-				return err
-			}
-
-			pass, err = base64.StdEncoding.DecodeString(string(b))
-			if err != nil {
-				return errCommandSyntax
-			}
-
-		default:
-			return errCommandSyntax
+		name, pass, err := determineNamePass(s, c)
+		if err != nil {
+			return err
 		}
 
 		mailbox, err := authenticator.Auth(ctx, name, pass)
@@ -529,4 +494,91 @@ func auth(authenticator *delivery.Authenticator) handler {
 		s.mailbox = mailbox
 		return s.send(&rOk)
 	}
+}
+
+func determineNamePass(s *session, c *command) (name, pass []byte, err error) {
+	if len(c.tail) == 0 {
+		return nil, nil, errCommandSyntax
+	}
+
+	space := bytes.IndexByte(c.tail, ' ')
+	if space < 0 {
+		return nil, nil, errCommandSyntax
+	}
+
+	mechanism := c.tail[:space]
+
+	switch strings.ToUpper(string(mechanism)) {
+	case "PLAIN":
+		return parsePlainAuth(c.tail[space+1:])
+
+	case "LOGIN":
+		return processLoginAuth(s)
+
+	default:
+		return nil, nil, errCommandSyntax
+	}
+}
+
+func parsePlainAuth(tail []byte) (name, pass []byte, err error) {
+	if len(tail) != 1 {
+		return nil, nil, errCommandSyntax
+	}
+
+	b := make([]byte, base64.StdEncoding.DecodedLen(len(tail)))
+	n, err := base64.StdEncoding.Decode(b, tail)
+	if err != nil {
+		return nil, nil, errCommandSyntax
+	}
+
+	switch fields := bytes.Split(b[:n], []byte{0}); len(fields) {
+	case 2:
+		// <authentication-identity> NULLBYTE <password>
+		return fields[0], fields[1], nil
+
+	case 3:
+		// <authorization-identity> NULLBYTE <authentication-identity> NULLBYTE <password>
+		// we only accept authorization == authentication
+
+		if !bytes.Equal(fields[0], fields[1]) {
+			return nil, nil, errCommandSyntax
+		}
+
+		return fields[0], fields[2], nil
+
+	default:
+		return nil, nil, errCommandSyntax
+	}
+}
+
+func processLoginAuth(s *session) (name, pass []byte, err error) {
+	if err := s.send(&reply{334, "VXNlcm5hbWU6"}); err != nil {
+		return nil, nil, err
+	}
+
+	b, err := s.ReadLine()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	name, err = base64.StdEncoding.DecodeString(string(b))
+	if err != nil {
+		return nil, nil, errCommandSyntax
+	}
+
+	if err := s.send(&reply{334, "UGFzc3dvcmQ6"}); err != nil {
+		return nil, nil, err
+	}
+
+	b, err = s.ReadLine()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	pass, err = base64.StdEncoding.DecodeString(string(b))
+	if err != nil {
+		return nil, nil, errCommandSyntax
+	}
+
+	return
 }
