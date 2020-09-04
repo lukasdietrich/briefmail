@@ -506,13 +506,14 @@ func determineNamePass(s *session, c *command) (name, pass []byte, err error) {
 		return nil, nil, errCommandSyntax
 	}
 
-	mechanism := c.tail[:space]
+	mechanism := string(c.tail[:space])
+	mechanism = strings.ToLower(mechanism)
 
-	switch strings.ToUpper(string(mechanism)) {
-	case "PLAIN":
+	switch mechanism {
+	case "plain":
 		return parsePlainAuth(c.tail[space+1:])
 
-	case "LOGIN":
+	case "login":
 		return processLoginAuth(s)
 
 	default:
@@ -525,13 +526,12 @@ func parsePlainAuth(tail []byte) (name, pass []byte, err error) {
 		return nil, nil, errCommandSyntax
 	}
 
-	b := make([]byte, base64.StdEncoding.DecodedLen(len(tail)))
-	n, err := base64.StdEncoding.Decode(b, tail)
+	b, err := decodeBase64Bytes(tail)
 	if err != nil {
 		return nil, nil, errCommandSyntax
 	}
 
-	switch fields := bytes.Split(b[:n], []byte{0}); len(fields) {
+	switch fields := bytes.Split(b, []byte{0}); len(fields) {
 	case 2:
 		// <authentication-identity> NULLBYTE <password>
 		return fields[0], fields[1], nil
@@ -561,7 +561,7 @@ func processLoginAuth(s *session) (name, pass []byte, err error) {
 		return nil, nil, err
 	}
 
-	name, err = base64.StdEncoding.DecodeString(string(b))
+	name, err = decodeBase64Bytes(b)
 	if err != nil {
 		return nil, nil, errCommandSyntax
 	}
@@ -575,10 +575,20 @@ func processLoginAuth(s *session) (name, pass []byte, err error) {
 		return nil, nil, err
 	}
 
-	pass, err = base64.StdEncoding.DecodeString(string(b))
+	pass, err = decodeBase64Bytes(b)
 	if err != nil {
 		return nil, nil, errCommandSyntax
 	}
 
 	return
+}
+
+func decodeBase64Bytes(encoded []byte) ([]byte, error) {
+	decoded := make([]byte, base64.StdEncoding.DecodedLen(len(encoded)))
+	n, err := base64.StdEncoding.Decode(decoded, encoded)
+	if err != nil {
+		return nil, err
+	}
+
+	return decoded[:n], nil
 }
