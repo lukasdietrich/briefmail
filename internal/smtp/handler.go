@@ -42,6 +42,20 @@ var (
 
 type handler func(context.Context, *session, *command) error
 
+type smtpError struct {
+	code  int
+	text  string
+	cause error
+}
+
+func (e smtpError) Error() string {
+	if e.cause != nil {
+		return fmt.Sprintf("%v: %d %s", e.cause, e.code, e.text)
+	}
+
+	return fmt.Sprintf("%d %s", e.code, e.text)
+}
+
 // `HELO` command as specified in RFC#5321 4.1.1.1
 //
 //     "HELO" SP <Domain> CRLF
@@ -64,7 +78,6 @@ func helo(hostname string) handler {
 func ehlo(hostname string, extensions ...string) handler {
 	extensions = append(extensions, "8BITMIME")
 
-	// nolint:errcheck
 	return func(ctx context.Context, s *session, c *command) error {
 		s.state = sHelo
 		s.envelope.Helo = string(c.tail)
@@ -197,14 +210,15 @@ func checkOrigin(ctx context.Context, s *session, origin *delivery.LookupResult)
 				Int64("mailbox", s.mailbox.ID).
 				Msg("authenticated connection trying to send as someone else")
 
-			return s.reply(550, "that does not sound like you.")
+			return smtpError{code: 550, text: "that does not sound like you."}
 		}
-	}
+	} else {
+		// unauthenticated connections must send mails from a remote address
 
-	// unauthenticated connections must send mails from a remote address
-	if origin.IsLocal {
-		log.WarnContext(ctx).Msg("attempted submission without authentication")
-		return s.reply(550, "submissions must be authenticated.")
+		if origin.IsLocal {
+			log.WarnContext(ctx).Msg("attempted submission without authentication")
+			return smtpError{code: 550, text: "submissions must be authenticated."}
+		}
 	}
 
 	return nil
@@ -231,7 +245,7 @@ func checkMaxSize(ctx context.Context, s *session, params map[string]string, max
 				Int64("size", size).
 				Int64("maxSize", maxSize).
 				Msg("requested SIZE parameter execeeding maximum configured size")
-			return s.reply(552, "that is a bit too much")
+			return smtpError{code: 552, text: "that is a bit too much"}
 		}
 	}
 
@@ -248,7 +262,7 @@ func execFromHooks(ctx context.Context, s *session, from mails.Address, hooks []
 		}
 
 		if result.Reject {
-			return s.reply(result.Code, result.Text)
+			return smtpError{code: result.Code, text: result.Text}
 		}
 
 		headers = append(headers, result.Headers...)

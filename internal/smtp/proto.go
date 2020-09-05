@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 
@@ -136,30 +137,32 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 					Msg("error during command")
 			}
 
-			switch err {
-			case errBadSequence:
-				if err := s.reply(503, "bad sequence of commands"); err != nil {
-					return err
-				}
-
-			case errCommandSyntax:
-				if err := s.reply(501, "syntax error in parameters or arguments"); err != nil {
-					return err
-				}
-
-			case mails.ErrInvalidAddressFormat:
-				if err := s.reply(553, "invalid address format"); err != nil {
-					return err
-				}
-
-			case mails.ErrPathTooLong:
-				if err := s.reply(501, "path too long"); err != nil {
-					return err
-				}
-
-			default:
+			if err := handleError(s, err); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func handleError(s *session, err error) error {
+	var smtpErr smtpError
+	if errors.As(err, &smtpErr) {
+		return s.reply(smtpErr.code, smtpErr.text)
+	}
+
+	switch {
+	case errors.Is(err, errBadSequence):
+		return s.reply(503, "bad sequence of commands")
+
+	case errors.Is(err, errCommandSyntax):
+		return s.reply(501, "syntax error in parameters or arguments")
+
+	case errors.Is(err, mails.ErrInvalidAddressFormat):
+		return s.reply(553, "invalid address format")
+
+	case errors.Is(err, mails.ErrPathTooLong):
+		return s.reply(501, "path too long")
+	}
+
+	return err
 }

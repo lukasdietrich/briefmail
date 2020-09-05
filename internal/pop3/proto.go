@@ -18,6 +18,7 @@ package pop3
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 
@@ -135,20 +136,21 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 					Msg("error during command")
 			}
 
-			switch err {
-			case errBadSequence:
-				if err := s.reply(false, "bad sequence of commands"); err != nil {
-					return err
-				}
-
-			case errInvalidSyntax:
-				if err := s.reply(false, "invalid syntax"); err != nil {
-					return err
-				}
-
-			default:
+			if err := handleError(s, err); err != nil {
 				return err
 			}
 		}
 	}
+}
+
+func handleError(s *session, err error) error {
+	switch {
+	case errors.Is(err, errBadSequence):
+		return s.reply(false, "bad sequence of commands")
+
+	case errors.Is(err, errInvalidSyntax):
+		return s.reply(false, "invalid syntax")
+	}
+
+	return err
 }
