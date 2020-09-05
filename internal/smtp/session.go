@@ -16,6 +16,7 @@
 package smtp
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/lukasdietrich/briefmail/internal/mails"
@@ -65,12 +66,17 @@ func (s *session) isSubmission() bool {
 	return s.mailbox != nil
 }
 
-func (s *session) send(r *reply) error {
+func (s *session) reply(code int, text string) error {
 	if err := s.SetWriteTimeout(time.Minute * 5); err != nil {
 		return err
 	}
 
-	return r.writeTo(s)
+	s.WriteString(strconv.Itoa(code))
+	s.WriteString(" ")
+	s.WriteString(text)
+	s.Endline()
+
+	return s.Flush()
 }
 
 func (s *session) read(c *command) error {

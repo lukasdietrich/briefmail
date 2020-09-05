@@ -67,16 +67,6 @@ func New(
 	}
 }
 
-var (
-	rReady          = reply{true, "ready"}
-	rBye            = reply{true, "closing transmission channel"}
-	rTimeout        = reply{false, "timed out"}
-	rError          = reply{false, "action aborted: local error in processing"}
-	rNotImplemented = reply{false, "command not implemented"}
-	rBadSequence    = reply{false, "bad sequence of commands"}
-	rInvalidSyntax  = reply{false, "invalid syntax"}
-)
-
 // Handle accepts a pop3 connection and handles all incoming commands in a loop until the
 // transmission is closed.
 func (p *Proto) Handle(c textproto.Conn) {
@@ -85,7 +75,7 @@ func (p *Proto) Handle(c textproto.Conn) {
 		state: sInit,
 	}
 
-	if err := s.send(&rReady); err != nil {
+	if err := s.reply(true, "ready"); err != nil {
 		return
 	}
 
@@ -95,16 +85,16 @@ func (p *Proto) Handle(c textproto.Conn) {
 	switch err := p.loop(ctx, s); err {
 	case io.EOF, errCloseSession, nil:
 		log.InfoContext(ctx).Msg("session closed")
-		s.send(&rBye)
+		s.reply(true, "closing transmission channel")
 	default:
 		log.ErrorContext(ctx).
 			Err(err).
 			Msg("session closed with an error")
 
 		if errt, ok := err.(*net.OpError); ok && errt.Timeout() {
-			s.send(&rTimeout)
+			s.reply(false, "timed out")
 		} else {
-			s.send(&rError)
+			s.reply(false, "action aborted: local error in processing")
 		}
 	}
 
@@ -131,7 +121,7 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 		if !ok {
 			log.DebugContext(ctx).Msg("command not implemented")
 
-			if err := s.send(&rNotImplemented); err != nil {
+			if err := s.reply(false, "command not implemented"); err != nil {
 				return err
 			}
 
@@ -147,12 +137,12 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 
 			switch err {
 			case errBadSequence:
-				if err := s.send(&rBadSequence); err != nil {
+				if err := s.reply(false, "bad sequence of commands"); err != nil {
 					return err
 				}
 
 			case errInvalidSyntax:
-				if err := s.send(&rInvalidSyntax); err != nil {
+				if err := s.reply(false, "invalid syntax"); err != nil {
 					return err
 				}
 

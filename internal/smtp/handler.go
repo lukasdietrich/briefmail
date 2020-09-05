@@ -46,8 +46,6 @@ type handler func(context.Context, *session, *command) error
 //
 //     "HELO" SP <Domain> CRLF
 func helo(hostname string) handler {
-	rReady := reply{250, hostname}
-
 	return func(ctx context.Context, s *session, c *command) error {
 		s.state = sHelo
 		s.envelope.Helo = string(c.tail)
@@ -56,7 +54,7 @@ func helo(hostname string) handler {
 			Str("hostname", s.envelope.Helo).
 			Msg("resetting transaction state")
 
-		return s.send(&rReady)
+		return s.reply(250, hostname)
 	}
 }
 
@@ -99,10 +97,8 @@ func ehlo(hostname string, extensions ...string) handler {
 //
 //     "NOOP" CRLF
 func noop() handler {
-	rOk := reply{250, "nothing happened. as expected"}
-
 	return func(_ context.Context, s *session, _ *command) error {
-		return s.send(&rOk)
+		return s.reply(250, "nothing happened. as expected")
 	}
 }
 
@@ -110,8 +106,6 @@ func noop() handler {
 //
 //     "RSET" CRLF
 func rset() handler {
-	rOk := reply{250, "everything gone. pinky promise"}
-
 	return func(ctx context.Context, s *session, _ *command) error {
 		if !s.state.in(sInit, sHelo) {
 			s.state = sHelo
@@ -123,7 +117,7 @@ func rset() handler {
 
 		log.DebugContext(ctx).Msg("resetting transaction state")
 
-		return s.send(&rOk)
+		return s.reply(250, "everything gone. pinky promise")
 	}
 }
 
@@ -131,10 +125,8 @@ func rset() handler {
 //
 //     "VRFY" SP <user OR mailbox> CRLF
 func vrfy() handler {
-	rMaybe := reply{252, "maybe, maybe not? who knows for sure"}
-
 	return func(_ context.Context, s *session, _ *command) error {
-		return s.send(&rMaybe)
+		return s.reply(252, "maybe, maybe not? who knows for sure")
 	}
 }
 
@@ -191,7 +183,7 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			Str("from", arg).
 			Msg("beginning mail transaction")
 
-		return s.send(&reply{250, "noted."})
+		return s.reply(250, "noted.")
 	}
 }
 
@@ -205,14 +197,14 @@ func checkOrigin(ctx context.Context, s *session, origin *delivery.LookupResult)
 				Int64("mailbox", s.mailbox.ID).
 				Msg("authenticated connection trying to send as someone else")
 
-			return s.send(&reply{550, "that does not sound like you."})
+			return s.reply(550, "that does not sound like you.")
 		}
 	}
 
 	// unauthenticated connections must send mails from a remote address
 	if origin.IsLocal {
 		log.WarnContext(ctx).Msg("attempted submission without authentication")
-		return s.send(&reply{550, "submissions must be authenticated."})
+		return s.reply(550, "submissions must be authenticated.")
 	}
 
 	return nil
@@ -239,7 +231,7 @@ func checkMaxSize(ctx context.Context, s *session, params map[string]string, max
 				Int64("size", size).
 				Int64("maxSize", maxSize).
 				Msg("requested SIZE parameter execeeding maximum configured size")
-			return s.send(&reply{552, "that is a bit too much"})
+			return s.reply(552, "that is a bit too much")
 		}
 	}
 
@@ -256,7 +248,7 @@ func execFromHooks(ctx context.Context, s *session, from mails.Address, hooks []
 		}
 
 		if result.Reject {
-			return s.send(&reply{result.Code, result.Text})
+			return s.reply(result.Code, result.Text)
 		}
 
 		headers = append(headers, result.Headers...)
@@ -270,12 +262,6 @@ func execFromHooks(ctx context.Context, s *session, from mails.Address, hooks []
 //
 //     "RCPT TO:<" <Forward-path> ">" [ SP Parameters ] CRLF
 func rcpt(addressbook *delivery.Addressbook) handler {
-	var (
-		rOk                = reply{250, "yup, another?"}
-		rTooManyRecipients = reply{452, "that is quite a crowd already!"}
-		rInvalidRecipient  = reply{550, "never heard of that person."}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sMail, sRcpt) {
 			return errBadSequence
@@ -290,7 +276,7 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 			log.DebugContext(ctx).
 				Int("recipientCount", len(s.envelope.To)).
 				Msg("too many recipients")
-			return s.send(&rTooManyRecipients)
+			return s.reply(452, "that is quite a crowd already!")
 		}
 
 		to, err := mails.ParseUnicode(arg)
@@ -304,7 +290,7 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 		}
 
 		if !isValidDestination(s, destination) {
-			return s.send(&rInvalidRecipient)
+			return s.reply(550, "never heard of that person.")
 		}
 
 		s.envelope.To = append(s.envelope.To, to)
@@ -314,7 +300,7 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 			Str("to", arg).
 			Msg("recipient added")
 
-		return s.send(&rOk)
+		return s.reply(250, "yup, another?")
 	}
 }
 
@@ -332,12 +318,6 @@ func isValidDestination(s *session, destination *delivery.LookupResult) bool {
 //
 //     "DATA" CRLF
 func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
-	var (
-		rData = reply{354, "go ahead. period."}
-		rOk   = reply{250, "confirmed transfer."}
-		rSize = reply{552, "I am already full, thanks"}
-	)
-
 	return func(ctx context.Context, s *session, _ *command) error {
 		if !s.state.in(sRcpt) {
 			return errBadSequence
@@ -345,7 +325,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 
 		log.DebugContext(ctx).Msg("receiving mail content")
 
-		if err := s.send(&rData); err != nil {
+		if err := s.reply(354, "go ahead. period."); err != nil {
 			return err
 		}
 
@@ -384,7 +364,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 					return err
 				}
 
-				return s.send(&rSize)
+				return s.reply(552, "I am already full, thanks")
 			}
 
 			return err
@@ -406,7 +386,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 			}
 
 			if result.Reject {
-				return s.send(&reply{result.Code, result.Text})
+				return s.reply(result.Code, result.Text)
 			}
 
 			headers = append(headers, result.Headers...)
@@ -432,7 +412,7 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 		}
 
 		s.state = sHelo
-		return s.send(&rOk)
+		return s.reply(250, "confirmed transfer.")
 	}
 }
 
@@ -440,22 +420,16 @@ func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks 
 //
 //     "STARTTLS" CRLF
 func starttls(config *tls.Config) handler {
-	var (
-		rReady          = reply{220, "ready to go undercover."}
-		rTLSUnavailable = reply{454, "I am afraid, I lost my disguise!"}
-		rAlreadyTLS     = reply{454, "what are you afraid of?"}
-	)
-
 	return func(ctx context.Context, s *session, _ *command) error {
 		if config == nil {
-			return s.send(&rTLSUnavailable)
+			return s.reply(454, "I am afraid, I lost my disguise!")
 		}
 
 		if s.IsTLS() {
-			return s.send(&rAlreadyTLS)
+			return s.reply(454, "what are you afraid of?")
 		}
 
-		if err := s.send(&rReady); err != nil {
+		if err := s.reply(220, "ready to go undercover."); err != nil {
 			return err
 		}
 
@@ -467,11 +441,6 @@ func starttls(config *tls.Config) handler {
 //
 //     "AUTH" <Mechanism> [ Payload ] CRLF
 func auth(authenticator *delivery.Authenticator) handler {
-	var (
-		rOk   = reply{235, "I was sure I saw you before."}
-		rFail = reply{535, "Solid attempt."}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo) {
 			return errBadSequence
@@ -485,14 +454,14 @@ func auth(authenticator *delivery.Authenticator) handler {
 		mailbox, err := authenticator.Auth(ctx, name, pass)
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
-				return s.send(&rFail)
+				return s.reply(535, "Solid attempt.")
 			}
 
 			return err
 		}
 
 		s.mailbox = mailbox
-		return s.send(&rOk)
+		return s.reply(235, "I was sure I saw you before.")
 	}
 }
 
@@ -553,7 +522,7 @@ func parsePlainAuth(tail []byte) (name, pass []byte, err error) {
 }
 
 func processLoginAuth(s *session) (name, pass []byte, err error) {
-	if err := s.send(&reply{334, "VXNlcm5hbWU6"}); err != nil {
+	if err := s.reply(334, "VXNlcm5hbWU6"); err != nil {
 		return nil, nil, err
 	}
 
@@ -567,7 +536,7 @@ func processLoginAuth(s *session) (name, pass []byte, err error) {
 		return nil, nil, errCommandSyntax
 	}
 
-	if err := s.send(&reply{334, "UGFzc3dvcmQ6"}); err != nil {
+	if err := s.reply(334, "UGFzc3dvcmQ6"); err != nil {
 		return nil, nil, err
 	}
 

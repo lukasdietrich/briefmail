@@ -76,17 +76,6 @@ func New(
 	}
 }
 
-var (
-	rReady          = reply{220, "ready"}
-	rBye            = reply{221, "closing transmission channel"}
-	rError          = reply{451, "action aborted: local error in processing"}
-	rPathTooLong    = reply{501, "path too long"}
-	rCommandSyntax  = reply{501, "syntax error in parameters or arguments"}
-	rNotImplemented = reply{502, "command not implemented"}
-	rBadSequence    = reply{503, "bad sequence of commands"}
-	rInvalidAddress = reply{553, "invalid address format"}
-)
-
 // Handle accepts an smtp connection and handles all incoming commands in a loop until the
 // transmission is closed.
 func (p *Proto) Handle(c textproto.Conn) {
@@ -98,7 +87,7 @@ func (p *Proto) Handle(c textproto.Conn) {
 		},
 	}
 
-	if err := s.send(&rReady); err != nil {
+	if err := s.reply(220, "ready"); err != nil {
 		return
 	}
 
@@ -108,13 +97,13 @@ func (p *Proto) Handle(c textproto.Conn) {
 	switch err := p.loop(ctx, s); err {
 	case io.EOF, errCloseSession, nil:
 		log.InfoContext(ctx).Msg("session closed")
-		s.send(&rBye)
+		s.reply(221, "closing transmission channel")
 	default:
 		log.ErrorContext(ctx).
 			Err(err).
 			Msg("session closed with an error")
 
-		s.send(&rError)
+		s.reply(451, "action aborted: local error in processing")
 	}
 }
 
@@ -133,7 +122,7 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 		if !ok {
 			log.DebugContext(ctx).Msg("command not implemented")
 
-			if err := s.send(&rNotImplemented); err != nil {
+			if err := s.reply(502, "command not implemented"); err != nil {
 				return err
 			}
 
@@ -149,22 +138,22 @@ func (p *Proto) loop(ctx context.Context, s *session) error {
 
 			switch err {
 			case errBadSequence:
-				if err := s.send(&rBadSequence); err != nil {
+				if err := s.reply(503, "bad sequence of commands"); err != nil {
 					return err
 				}
 
 			case errCommandSyntax:
-				if err := s.send(&rCommandSyntax); err != nil {
+				if err := s.reply(501, "syntax error in parameters or arguments"); err != nil {
 					return err
 				}
 
 			case mails.ErrInvalidAddressFormat:
-				if err := s.send(&rInvalidAddress); err != nil {
+				if err := s.reply(553, "invalid address format"); err != nil {
 					return err
 				}
 
 			case mails.ErrPathTooLong:
-				if err := s.send(&rPathTooLong); err != nil {
+				if err := s.reply(501, "path too long"); err != nil {
 					return err
 				}
 

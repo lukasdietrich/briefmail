@@ -59,12 +59,22 @@ type session struct {
 	inbox   *delivery.Inbox
 }
 
-func (s *session) send(r *reply) error {
+func (s *session) reply(ok bool, text string) error {
 	if err := s.SetWriteTimeout(time.Minute * 5); err != nil {
 		return err
 	}
 
-	return r.writeTo(s)
+	if ok {
+		s.WriteString("+OK")
+	} else {
+		s.WriteString("-ERR")
+	}
+
+	s.WriteString(" ")
+	s.WriteString(text)
+	s.Endline()
+
+	return s.Flush()
 }
 
 func (s *session) read(c *command) error {

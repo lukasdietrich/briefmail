@@ -39,8 +39,6 @@ type handler func(context.Context, *session, *command) error
 //
 //     "USER" <mailbox> CRLF
 func user() handler {
-	rOk := reply{true, "now the secret"}
-
 	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sInit, sUser) {
 			return errBadSequence
@@ -53,7 +51,7 @@ func user() handler {
 		s.name = c.args[0]
 		s.state = sUser
 
-		return s.send(&rOk)
+		return s.reply(true, "now the secret")
 	}
 }
 
@@ -61,12 +59,6 @@ func user() handler {
 //
 //     "PASS" <password> CRLF
 func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inboxer) handler {
-	var (
-		rOk        = reply{true, "I knew it was you!"}
-		rWrongPass = reply{false, "nice try"}
-		rLocked    = reply{false, "there is two of you?"}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sUser) {
 			return errBadSequence
@@ -79,14 +71,14 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 		mailbox, err := authenticator.Auth(ctx, s.name, c.args[0])
 		if err != nil {
 			if errors.Is(err, delivery.ErrWrongAddressPassword) {
-				return s.send(&rWrongPass)
+				return s.reply(false, "nice try")
 			}
 
 			return err
 		}
 
 		if !l.lock(mailbox.ID) {
-			return s.send(&rLocked)
+			return s.reply(false, "there is two of you?")
 		}
 
 		log.InfoContext(ctx).
@@ -101,7 +93,7 @@ func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inb
 
 		s.state = sTransaction
 
-		return s.send(&rOk)
+		return s.reply(true, "I knew it was you!")
 	}
 }
 
@@ -130,10 +122,7 @@ func stat() handler {
 			return errBadSequence
 		}
 
-		return s.send(&reply{
-			true,
-			fmt.Sprintf("%d %d", s.inbox.Count(), s.inbox.Size()),
-		})
+		return s.reply(true, fmt.Sprintf("%d %d", s.inbox.Count(), s.inbox.Size()))
 	}
 }
 
@@ -141,8 +130,6 @@ func stat() handler {
 //
 //     "LIST" [ id ] CRLF
 func list() handler {
-	rNoMessage := reply{false, "no such message"}
-
 	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
@@ -150,10 +137,7 @@ func list() handler {
 
 		switch len(c.args) {
 		case 0:
-			s.send(&reply{
-				true,
-				fmt.Sprintf("%d messages (%d octets)", s.inbox.Count(), s.inbox.Size()),
-			})
+			s.reply(true, fmt.Sprintf("%d messages (%d octets)", s.inbox.Count(), s.inbox.Size()))
 
 			for i, mail := range s.inbox.Mails {
 				if s.inbox.IsMarked(i) {
@@ -177,10 +161,11 @@ func list() handler {
 
 			mail, ok := s.inbox.Mail(index)
 			if !ok {
-				return s.send(&rNoMessage)
+				return s.reply(false, "no such message")
 			}
 
-			return s.send(&reply{true, fmt.Sprintf("%d %d", index+1, mail.Size)})
+			return s.reply(true, fmt.Sprintf("%d %d", index+1, mail.Size))
+
 		default:
 			return errInvalidSyntax
 		}
@@ -191,11 +176,6 @@ func list() handler {
 //
 //     "UIDL" [ id ] CRLF
 func uidl() handler {
-	var (
-		rOk        = reply{true, "list follows"}
-		rNoMessage = reply{false, "no such message"}
-	)
-
 	return func(_ context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
@@ -203,7 +183,7 @@ func uidl() handler {
 
 		switch len(c.args) {
 		case 0:
-			s.send(&rOk)
+			s.reply(true, "list follows")
 
 			for i, mail := range s.inbox.Mails {
 				if s.inbox.IsMarked(i) {
@@ -227,10 +207,10 @@ func uidl() handler {
 
 			mail, ok := s.inbox.Mail(index)
 			if !ok {
-				return s.send(&rNoMessage)
+				return s.reply(false, "no such message")
 			}
 
-			return s.send(&reply{true, fmt.Sprintf("%d %s", index+1, mail.ID)})
+			return s.reply(true, fmt.Sprintf("%d %s", index+1, mail.ID))
 
 		default:
 			return errInvalidSyntax
@@ -242,11 +222,6 @@ func uidl() handler {
 //
 //     "RETR" <id> CRLF
 func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
-	var (
-		rOk        = reply{true, "message coming"}
-		rNoMessage = reply{false, "no such message"}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
@@ -263,10 +238,10 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 
 		mail, ok := s.inbox.Mail(index)
 		if !ok {
-			return s.send(&rNoMessage)
+			return s.reply(false, "no such message")
 		}
 
-		if err := s.send(&rOk); err != nil {
+		if err := s.reply(true, "message coming"); err != nil {
 			return err
 		}
 
@@ -294,11 +269,6 @@ func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
 //
 //     "DELE" <id> CRLF
 func dele() handler {
-	var (
-		rOk        = reply{true, "woosh"}
-		rNoMessage = reply{false, "no such message"}
-	)
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
@@ -314,7 +284,7 @@ func dele() handler {
 		}
 
 		if _, ok := s.inbox.Mail(index); !ok {
-			return s.send(&rNoMessage)
+			return s.reply(false, "no such message")
 		}
 
 		s.inbox.Mark(index)
@@ -323,7 +293,7 @@ func dele() handler {
 			Int("index", index).
 			Msg("marking mail for deletion")
 
-		return s.send(&rOk)
+		return s.reply(true, "woosh")
 	}
 }
 
@@ -331,10 +301,8 @@ func dele() handler {
 //
 //     "NOOP" CRLF
 func noop() handler {
-	rOk := reply{true, "what did you expect?"}
-
 	return func(_ context.Context, s *session, _ *command) error {
-		return s.send(&rOk)
+		return s.reply(true, "what did you expect?")
 	}
 }
 
@@ -342,8 +310,6 @@ func noop() handler {
 //
 //     "RSET" CRLF
 func rset() handler {
-	rOk := reply{true, "lost some intel during time travel"}
-
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence
@@ -352,7 +318,7 @@ func rset() handler {
 		s.inbox.Reset()
 
 		log.InfoContext(ctx).Msg("resetting transaction")
-		return s.send(&rOk)
+		return s.reply(true, "lost some intel during time travel")
 	}
 }
 
@@ -360,22 +326,16 @@ func rset() handler {
 //
 //     "STLS" CRLF
 func stls(config *tls.Config) handler {
-	var (
-		rReady          = reply{true, "ready to go undercover."}
-		rTLSUnavailable = reply{false, "I am afraid, I lost my disguise!"}
-		rAlreadyTLS     = reply{false, "what are you afraid of?"}
-	)
-
 	return func(ctx context.Context, s *session, _ *command) error {
 		if config == nil {
-			return s.send(&rTLSUnavailable)
+			return s.reply(false, "I am afraid, I lost my disguise!")
 		}
 
 		if s.IsTLS() {
-			return s.send(&rAlreadyTLS)
+			return s.reply(false, "what are you afraid of?")
 		}
 
-		if err := s.send(&rReady); err != nil {
+		if err := s.reply(true, "ready to go undercover."); err != nil {
 			return err
 		}
 
@@ -388,12 +348,8 @@ func stls(config *tls.Config) handler {
 //
 //     "CAPA" CRLF
 func capa(capabilities ...string) handler {
-	var (
-		rOk = reply{true, "I can do some things"}
-	)
-
 	return func(_ context.Context, s *session, _ *command) error {
-		if err := s.send(&rOk); err != nil {
+		if err := s.reply(true, "I can do some things"); err != nil {
 			return err
 		}
 
