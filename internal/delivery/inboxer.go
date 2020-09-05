@@ -76,6 +76,11 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 		Int64("mailbox", mailbox.ID).
 		Msg("committing inbox changes")
 
+	var (
+		deleteCount int
+		keepCount   int
+	)
+
 	for index, mail := range inbox.Mails {
 		if inbox.IsMarked(index) {
 			log.DebugContext(ctx).
@@ -83,15 +88,24 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 				Str("mail", mail.ID).
 				Msg("deleting mail from mailbox")
 
-			if err := queries.DeleteMailboxEntry(tx, mailbox, &mail); err != nil {
+			if err := queries.UpdateRecipientsDelivered(tx, mailbox, &mail); err != nil {
 				return err
 			}
+
+			deleteCount++
+		} else {
+			keepCount++
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+
+	log.InfoContext(ctx).
+		Int("deleteCount", deleteCount).
+		Int("keepCount", keepCount).
+		Msg("inbox changes applied")
 
 	if err := i.cleaner.Clean(ctx); err != nil {
 		log.ErrorContext(ctx).

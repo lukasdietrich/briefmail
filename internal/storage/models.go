@@ -15,6 +15,8 @@
 
 package storage
 
+import "database/sql"
+
 // Mailbox is the entity for the "mailboxes" table.
 type Mailbox struct {
 	ID   int64  `db:"id"`
@@ -23,10 +25,40 @@ type Mailbox struct {
 
 // Mail is the entity for the "mails" table.
 type Mail struct {
-	ID         string `db:"id"`
-	ReceivedAt int64  `db:"received_at"`
-	ReturnPath string `db:"return_path"`
-	Size       int64  `db:"size"`
+	ID         string        `db:"id"`
+	ReceivedAt int64         `db:"received_at"`
+	DeletedAt  sql.NullInt64 `db:"deleted_at"`
+	ReturnPath string        `db:"return_path"`
+	Size       int64         `db:"size"`
+	Attempt    int           `db:"attempt"`
+}
+
+// DeliveryStatus indicates the status of delivery per recipient.
+type DeliveryStatus int
+
+// The gaps between the numerical values is in case we later need to add some new ones in between.
+
+const (
+	// StatusFailed is a mail that could not be delivered after the final attempt.
+	StatusFailed = DeliveryStatus(10)
+	// StatusDelivered is a mail that reached its final destination. This is either a successful
+	// outbound transmission or a local mail, that has been retrieved.
+	StatusDelivered = DeliveryStatus(20)
+	// StatusInboxed is a mail delivered, but not deleted, to a local mailbox.
+	StatusInboxed = DeliveryStatus(30)
+	// StatusPending is a mail queued for outbound transmision.
+	StatusPending = DeliveryStatus(40)
+	// MaxCompletedStatus is the highest (numerical) status, that is considered "completed".
+	MaxCompletedStatus = StatusDelivered
+)
+
+// Recipient is the entity for the "recipients" table.
+type Recipient struct {
+	ID          int64          `db:"id"`
+	MailID      string         `db:"mail_id"`
+	MailboxID   sql.NullInt64  `db:"mailbox_id"`
+	ForwardPath string         `db:"forward_path"`
+	Status      DeliveryStatus `db:"status"`
 }
 
 // Domain is the entity for the "domains" table.

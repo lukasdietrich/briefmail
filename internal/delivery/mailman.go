@@ -82,7 +82,7 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 	}
 
 	for _, to := range envelope.To {
-		if err := m.deliverToRecipient(ctx, tx, to, &mail); err != nil {
+		if err := m.deliverTo(ctx, tx, mail.ID, to); err != nil {
 			return err
 		}
 	}
@@ -108,46 +108,43 @@ func (m *Mailman) rollbackBlob(ctx context.Context, id string) func() {
 	}
 }
 
-// deliverToRecipient determines if a recipient is local or not and acts
-// accordingly. If local delivery fails because of a unique constraint, no
-// error is returned. This can only occur when multiple addresses point to the
-// same mailbox, in which case we just avoid duplicate entries.
-func (m *Mailman) deliverToRecipient(ctx context.Context, tx *storage.Tx, to mails.Address, mail *storage.Mail) error {
+// deliverTo delivers a mail to a single recipient. It determines if a recipient is local or not and
+// acts accordingly. Local mails are immediatey put into the associated mailbox. Outbound mails are
+// queued for later transmission.
+func (m *Mailman) deliverTo(ctx context.Context, tx *storage.Tx, mailID string, to mails.Address) error {
 	result, err := m.addressbook.LookupTx(tx, to)
 	if err != nil {
 		return err
 	}
 
+	recipient := storage.Recipient{
+		MailID:      mailID,
+		ForwardPath: to.String(),
+	}
+
 	switch {
 	case result.IsLocal && result.Mailbox != nil:
 		log.InfoContext(ctx).
-			Str("mail", mail.ID).
+			Str("mail", mailID).
 			Int64("mailbox", result.Mailbox.ID).
 			Stringer("to", to).
-			Msg("adding mail to mailbox")
+			Msg("delivering mail to local mailbox")
 
-		err := queries.InsertMailboxEntry(tx, result.Mailbox, mail)
-		if storage.IsErrUnique(err) {
-			log.InfoContext(ctx).
-				Str("mail", mail.ID).
-				Int64("mailbox", result.Mailbox.ID).
-				Stringer("to", to).
-				Msg("mail already in mailbox. skipping")
-			return nil
-		}
-
-		return err
+		recipient.MailboxID.Int64 = result.Mailbox.ID
+		recipient.MailboxID.Valid = true
+		recipient.Status = storage.StatusInboxed
 
 	case !result.IsLocal:
-		// TODO: Add to outbound queue.
 		log.InfoContext(ctx).
-			Str("mail", mail.ID).
+			Str("mail", mailID).
 			Stringer("to", to).
 			Msg("queueing mail for outbound delivery")
 
-		return nil
+		recipient.Status = storage.StatusPending
 
 	default:
 		return fmt.Errorf("could not deliver to unknown address %q", to)
 	}
+
+	return queries.InsertRecipient(tx, &recipient)
 }

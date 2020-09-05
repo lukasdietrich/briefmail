@@ -501,15 +501,16 @@ func determineNamePass(s *session, c *command) (name, pass []byte, err error) {
 		return nil, nil, errCommandSyntax
 	}
 
+	var mechanism string
+
 	space := bytes.IndexByte(c.tail, ' ')
 	if space < 0 {
-		return nil, nil, errCommandSyntax
+		mechanism = string(c.tail)
+	} else {
+		mechanism = string(c.tail[:space])
 	}
 
-	mechanism := string(c.tail[:space])
-	mechanism = strings.ToLower(mechanism)
-
-	switch mechanism {
+	switch strings.ToLower(mechanism) {
 	case "plain":
 		return parsePlainAuth(c.tail[space+1:])
 

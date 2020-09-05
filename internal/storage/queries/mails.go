@@ -22,18 +22,36 @@ import (
 // InsertMail inserts a new mail.
 func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
-		insert into "mails" ( "id", "received_at", "return_path", "size" )
-		values ( :id, :received_at, :return_path, :size ) ;
+		insert into "mails" (
+			"id" ,
+			"received_at" ,
+			"deleted_at" ,
+			"return_path" ,
+			"size" ,
+			"attempt"
+		) values (
+			:id ,
+			:received_at ,
+			:deleted_at ,
+			:return_path ,
+			:size ,
+			:attempt
+		) ;
 	`
 
 	_, err := tx.NamedExec(query, mail)
 	return err
 }
 
-// DeleteMail removes an existing mail.
-func DeleteMail(tx *storage.Tx, mail *storage.Mail) error {
+// UpdateMail updates an existing mail.
+func UpdateMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
-		delete from "mails"
+		update "mails"
+		set "received_at" = :received_at ,
+			"deleted_at"  = :deleted_at ,
+			"return_path" = :return_path ,
+			"size"        = :size ,
+			"attempt"     = :attempt
 		where "id" = :id ;
 	`
 
@@ -41,54 +59,33 @@ func DeleteMail(tx *storage.Tx, mail *storage.Mail) error {
 	return err
 }
 
-// InsertMailboxEntry inserts a mail into a mailbox.
-func InsertMailboxEntry(tx *storage.Tx, mailbox *storage.Mailbox, mail *storage.Mail) error {
-	const query = `
-		insert into "mailbox_entries" ( "mailbox_id", "mail_id"  )
-		values ( $1, $2 ) ;
-	`
-
-	_, err := tx.Exec(query, mailbox.ID, mail.ID)
-	return err
-}
-
-// DeleteMailboxEntry deletes a mail from an inbox. This does not remove the mail itself.
-func DeleteMailboxEntry(tx *storage.Tx, mailbox *storage.Mailbox, mail *storage.Mail) error {
-	const query = `
-		delete from "mailbox_entries"
-		where "mailbox_id" = $1
-		  and "mail_id" = $2 ;
-	`
-
-	_, err := tx.Exec(query, mailbox.ID, mail.ID)
-	return err
-}
-
-// FindMailsByMailbox returns a slice of mails in the mailbox sorted by date.
+// FindMailsByMailbox returns all mails that are not deleted and are "inboxed" to the mailbox.
 func FindMailsByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]storage.Mail, error) {
 	const query = `
-		select "mails".*
-		from "mails"
-			inner join "mailbox_entries"
-				on "mails"."id" = "mailbox_entries"."mail_id"
-		where "mailbox_entries"."mailbox_id" = $1
+		select distinct "mails".*
+		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
+		where "mails"."deleted_at" is null
+		  and "recipients"."mailbox_id" = $1
+		  and "recipients"."status" = $2
 		order by "mails"."received_at" asc ;
 	`
 
 	var mailSlice []storage.Mail
-	return mailSlice, tx.Select(&mailSlice, query, mailbox.ID)
+	return mailSlice, tx.Select(&mailSlice, query, mailbox.ID, storage.StatusInboxed)
 }
 
-// FindOrphanedMails returns a slice of mails that are not in any mailbox.
-func FindOrphanedMails(tx *storage.Tx) ([]storage.Mail, error) {
+// FindDeletableMails returns all mails which are not yet deleted and are delivered or failed to all
+// recipients.
+func FindDeletableMails(tx *storage.Tx) ([]storage.Mail, error) {
 	const query = `
 		select "mails".*
-		from "mails"
-			left join "mailbox_entries"
-				on "mails"."id" = "mailbox_entries"."mail_id"
-		where "mailbox_entries"."mail_id" is null ;
+		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
+		where "mails"."deleted_at" is null
+		group by "mails"."id"
+		having max("recipients"."status") <= $1
+		order by "mails"."received_at" asc ;
 	`
 
 	var mailSlice []storage.Mail
-	return mailSlice, tx.Select(&mailSlice, query)
+	return mailSlice, tx.Select(&mailSlice, query, storage.MaxCompletedStatus)
 }

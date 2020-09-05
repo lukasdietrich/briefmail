@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"time"
 
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
@@ -48,7 +49,7 @@ func (c *Cleaner) Clean(ctx context.Context) error {
 
 	defer tx.Rollback()
 
-	mails, err := queries.FindOrphanedMails(tx)
+	mails, err := queries.FindDeletableMails(tx)
 	if err != nil {
 		return err
 	}
@@ -69,5 +70,8 @@ func (c *Cleaner) deleteMail(ctx context.Context, tx *storage.Tx, mail *storage.
 		}
 	}
 
-	return queries.DeleteMail(tx, mail)
+	mail.DeletedAt.Int64 = time.Now().Unix()
+	mail.DeletedAt.Valid = true
+
+	return queries.UpdateMail(tx, mail)
 }
