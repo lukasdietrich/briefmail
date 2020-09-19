@@ -42,6 +42,7 @@ func init() {
 type Queue struct {
 	database *storage.Database
 	courier  *Courier
+	cleaner  *Cleaner
 
 	delaysInSeconds    []int64
 	giveUpAfterSeconds int64
@@ -52,7 +53,7 @@ type Queue struct {
 }
 
 // NewQueue creates a new Queue.
-func NewQueue(database *storage.Database, courier *Courier) (*Queue, error) {
+func NewQueue(database *storage.Database, courier *Courier, cleaner *Cleaner) (*Queue, error) {
 	var (
 		delaysInMinutes    = viper.GetIntSlice("mail.queue.delays")
 		giveUpAfterMinutes = viper.GetInt("mail.queue.giveUpAfter")
@@ -76,6 +77,7 @@ func NewQueue(database *storage.Database, courier *Courier) (*Queue, error) {
 	queue := Queue{
 		database: database,
 		courier:  courier,
+		cleaner:  cleaner,
 
 		delaysInSeconds:    delaysInSeconds,
 		giveUpAfterSeconds: giveUpAfterSeconds,
@@ -202,16 +204,22 @@ func (q *Queue) handleDeliveryResult(ctx context.Context, mail *storage.Mail, re
 		hasFailed  = result.check(SomeFailed)
 	)
 
-	if hasPending {
-		log.InfoContext(ctx).
-			Str("mail", mail.ID).
-			Msg("there are still pending recipients")
-	}
-
 	if hasFailed {
 		log.WarnContext(ctx).
 			Str("mail", mail.ID).
 			Msg("some recipients failed. notification mail is not yet implemented")
+	}
+
+	if hasPending {
+		log.InfoContext(ctx).
+			Str("mail", mail.ID).
+			Msg("there are still pending recipients")
+	} else {
+		if err := q.cleaner.Clean(ctx); err != nil {
+			log.ErrorContext(ctx).
+				Err(err).
+				Msg("error during cleanup")
+		}
 	}
 }
 
