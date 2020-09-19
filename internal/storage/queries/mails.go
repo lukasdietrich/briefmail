@@ -85,7 +85,7 @@ func FindDeletableMails(tx *storage.Tx) ([]storage.Mail, error) {
 		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
 		where "mails"."deleted_at" is null
 		group by "mails"."id"
-		having count(iif("recipients"."status" in ($1, $2)), null, 1) = 0
+		having count(iif("recipients"."status" in ($1, $2), null, 1)) = 0
 		order by "mails"."received_at" asc ;
 	`
 
