@@ -7,12 +7,13 @@ create table "mailboxes" (
 ) ;
 
 create table "mails" (
-	"id"          varchar not null primary key ,
-	"received_at" integer not null ,
-	"deleted_at"  integer ,
-	"return_path" varchar not null ,
-	"size"        integer not null ,
-	"attempt"     integer not null
+	"id"                varchar not null primary key ,
+	"received_at"       integer not null ,
+	"deleted_at"        integer ,
+	"return_path"       varchar not null ,
+	"size"              integer not null ,
+	"attempts"          integer not null ,
+	"last_attempted_at" integer
 ) ;
 
 create index "idx_mails_received_at"
@@ -20,6 +21,9 @@ create index "idx_mails_received_at"
 
 create index "idx_mails_deleted_at"
 	on "mails" ( "deleted_at" ) ;
+
+create index "idx_mails_last_attempted_at"
+	on "mails" ( "last_attempted_at" ) ;
 
 create table "recipients" (
 	"id"           integer not null primary key autoincrement ,

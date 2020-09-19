@@ -47,6 +47,8 @@ func newStartCommand() (*startCommand, error) {
 		delivery.NewAuthenticator,
 		delivery.NewAddressbook,
 		delivery.NewMailman,
+		delivery.NewQueue,
+		delivery.NewCourier,
 		delivery.NewInboxer,
 		delivery.NewCleaner,
 	))

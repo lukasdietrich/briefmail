@@ -15,300 +15,210 @@
 
 package delivery
 
-//import (
-//"crypto/tls"
-//"database/sql"
-//"errors"
-//"io"
-//"net"
-//"net/smtp"
-//"net/textproto"
-//"sort"
-//"sync"
-//"time"
-
-//"github.com/sirupsen/logrus"
-//"github.com/spf13/viper"
-
-//"github.com/lukasdietrich/briefmail/internal/mails"
-//"github.com/lukasdietrich/briefmail/internal/storage"
-//)
-
-//var (
-//errCouldNotConnect = errors.New("could not connect to any mx host")
-//)
-
-//type QueueWorker struct {
-//Database *storage.Database
-//Blobs    *storage.Blobs
-
-//lock  sync.Mutex  `wire:"-"`
-//alarm *time.Timer `wire:"-"`
-//busy  bool        `wire:"-"`
-//}
-
-//func (q *QueueWorker) WakeUp() {
-//q.lock.Lock()
-//defer q.lock.Unlock()
-
-//if q.alarm != nil {
-//q.alarm.Stop()
-//q.alarm = nil
-//}
-
-//if !q.busy {
-//q.busy = true
-//go q.work()
-//}
-//}
-
-//func (q *QueueWorker) sleep(d time.Duration) {
-//q.alarm = time.AfterFunc(d, q.WakeUp)
-//}
-
-//func (q *QueueWorker) next() (*storage.QueueElement, time.Duration, error) {
-//elem, err := q.Database.PeekQueue()
-//if err != nil {
-//if err == sql.ErrNoRows {
-//return nil, 0, nil
-//}
-
-//return nil, 0, err
-//}
-
-//if sleep := elem.Date.Sub(time.Now()); sleep > 0 {
-//return nil, sleep, nil
-//}
-
-//return elem, 0, nil
-//}
-
-//func (q *QueueWorker) work() {
-//cleaner := storage.NewCleaner(q.Database, q.Blobs)
-
-//for {
-//q.lock.Lock()
-
-//elem, sleep, err := q.next()
-//if err != nil {
-//log.Error(err)
-//time.Sleep(time.Minute * 5)
-
-//continue
-//}
-
-//if elem == nil {
-//q.busy = false
-
-//if sleep > 0 {
-//q.sleep(sleep)
-//}
-//}
-
-//q.lock.Unlock()
-
-//if elem == nil {
-//break
-//}
-
-//q.do(elem)
-//cleaner.Clean()
-//}
-//}
-
-//func (q *QueueWorker) do(elem *storage.QueueElement) {
-//log := log.WithFields(logrus.Fields{
-//"mail":    elem.MailID,
-//"attempt": elem.Attempts,
-//})
-
-//log.Info("attempting outbound delivery")
-
-//mail, err := q.Database.Mail(elem.MailID)
-//if err != nil {
-//log.Error(err)
-//return
-//}
-
-//var (
-//delivered     []mails.Address
-//undeliverable []mails.Address
-//pending       []mails.Address
-//)
-
-//for domain, addresses := range addressesByDomain(elem.To) {
-//var c client
-
-//if err := c.connect(domain); err != nil {
-//pending = append(pending, addresses...)
-//continue
-//}
-
-//defer c.close()
-
-//r, err := q.Blobs.OffsetReader(mail.ID, mail.Offset)
-//if err != nil {
-//pending = append(pending, addresses...)
-//continue
-//}
-
-//hostname := viper.GetString("general.hostname")
-//err = c.send(r, hostname, mail.From, addresses)
-//r.Close()
-
-//if err != nil {
-//pending = append(pending, addresses...)
-//continue
-//}
-
-//delivered = append(delivered, c.delivered...)
-//undeliverable = append(undeliverable, c.undeliverable...)
-//pending = append(pending, c.pending...)
-//}
-
-//if len(pending) > 0 {
-//tryAgain, nextAttempt := scheduleAttempt(elem.Attempts + 1)
-
-//if tryAgain {
-//err := q.Database.UpdateQueue(elem.MailID, pending, nextAttempt)
-//if err != nil {
-//log.Error(err)
-//}
-//} else {
-//undeliverable = append(undeliverable, pending...)
-//pending = nil
-//}
-//}
-
-//if len(undeliverable) > 0 {
-//log.WithField("to", undeliverable).
-//Warn("could not deliver to some recipients")
-//}
-
-//if len(pending) == 0 && len(undeliverable) == 0 {
-//log.Info("delivered mail to all recipients")
-
-//if err := q.Database.DeleteFromQueue(elem.MailID); err != nil {
-//log.Error(err)
-//}
-//}
-//}
-
-//func scheduleAttempt(attempt int) (bool, time.Time) {
-//now := time.Now()
-
-//switch true {
-//case attempt < 5:
-//return true, now.Add(time.Minute * 10)
-
-//case attempt < 10:
-//return true, now.Add(time.Minute * 30)
-
-//case attempt < 30:
-//return true, now.Add(time.Minute * 60)
-//}
-
-//return false, now
-//}
-
-//func addressesByDomain(addresses []mails.Address) map[string][]mails.Address {
-//domains := make(map[string][]mails.Address)
-
-//for _, addr := range addresses {
-//domains[addr.Domain()] = append(domains[addr.Domain()], addr)
-//}
-
-//return domains
-//}
-
-//type client struct {
-//conn   net.Conn
-//client *smtp.Client
-
-//delivered     []mails.Address
-//undeliverable []mails.Address
-//pending       []mails.Address
-//}
-
-//func (c *client) close() {
-//if c.client != nil {
-//c.client.Quit()
-//}
-
-//if c.conn != nil {
-//c.conn.Close()
-//}
-//}
-
-//func (c *client) connect(domain string) error {
-//records, err := net.LookupMX(domain)
-//if err != nil {
-//return err
-//}
-
-//sort.Slice(records, func(i, j int) bool {
-//return records[i].Pref < records[j].Pref
-//})
-
-//for _, record := range records {
-//c.conn, err = net.Dial("tcp", net.JoinHostPort(record.Host, "25"))
-//if err != nil {
-//continue
-//}
-
-//c.client, err = smtp.NewClient(c.conn, record.Host)
-//if err != nil {
-//c.conn.Close()
-//continue
-//}
-
-//return nil
-//}
-
-//return errCouldNotConnect
-//}
-
-//func (c *client) send(r io.Reader, hostname string, from mails.Address, to []mails.Address) error {
-//if err := c.client.Hello(hostname); err != nil {
-//return err
-//}
-
-//if ok, _ := c.client.Extension("STARTTLS"); ok {
-//err := c.client.StartTLS(&tls.Config{InsecureSkipVerify: true})
-//if err != nil {
-//return err
-//}
-//}
-
-//if err := c.client.Mail(from.String()); err != nil {
-//return err
-//}
-
-//for _, addr := range to {
-//if err := c.client.Rcpt(addr.String()); err != nil {
-//if _err, ok := err.(*textproto.Error); ok {
-//if _err.Code == 550 {
-//c.undeliverable = append(c.undeliverable, addr)
-//continue
-//}
-
-//c.pending = append(c.pending, addr)
-//continue
-//}
-
-//return err
-//}
-
-//c.delivered = append(c.delivered, addr)
-//}
-
-//w, err := c.client.Data()
-//if err != nil {
-//return err
-//}
-
-//defer w.Close()
-
-//_, err = io.Copy(w, r)
-//return err
-//}
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/spf13/viper"
+
+	"github.com/lukasdietrich/briefmail/internal/log"
+	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+)
+
+var (
+	errCouldNotConnect = errors.New("could not connect to any mx host")
+)
+
+func init() {
+	viper.SetDefault("mail.queue.delays", []int{20, 20, 20, 60, 180, 600})
+	viper.SetDefault("mail.queue.giveUpAfter", 4320) // 3 days
+}
+
+// Queue coordinates the delivery attempts of outbound mails.
+type Queue struct {
+	database *storage.Database
+	courier  *Courier
+
+	delaysInSeconds    []int64
+	giveUpAfterSeconds int64
+
+	mu    sync.Mutex  // protect the timer and busy flag.
+	timer *time.Timer // timer is used to wait for the next delivery attempt.
+	busy  bool        // busy is a flag to indicate if a delivery attempt is currently in progress.
+}
+
+// NewQueue creates a new Queue.
+func NewQueue(database *storage.Database, courier *Courier) (*Queue, error) {
+	var (
+		delaysInMinutes    = viper.GetIntSlice("mail.queue.delays")
+		giveUpAfterMinutes = viper.GetInt("mail.queue.giveUpAfter")
+
+		delaysInSeconds    = make([]int64, len(delaysInMinutes))
+		giveUpAfterSeconds = int64(giveUpAfterMinutes) * 60
+	)
+
+	if len(delaysInMinutes) == 0 {
+		return nil, fmt.Errorf("mail.queue.delays may not be empty")
+	}
+
+	if giveUpAfterMinutes <= 0 {
+		return nil, fmt.Errorf("mail.queue.giveUpAfter must be positive")
+	}
+
+	for i, delayInMinutes := range delaysInMinutes {
+		delaysInSeconds[i] = int64(delayInMinutes) * 60
+	}
+
+	queue := Queue{
+		database: database,
+		courier:  courier,
+
+		delaysInSeconds:    delaysInSeconds,
+		giveUpAfterSeconds: giveUpAfterSeconds,
+	}
+
+	queue.WakeUp(context.Background())
+	return &queue, nil
+}
+
+// WakeUp schedules the next pending mail for delivery.
+// Only one delivery will be executed at a time.
+func (q *Queue) WakeUp(ctx context.Context) {
+	defer q.mu.Unlock()
+	q.mu.Lock()
+
+	// When a delivery attempt is currently in progress, do not schedule another. When the attempt
+	// is done, the next attempt will be scheduled.
+	if !q.busy {
+
+		// If a timer is already set, override it.
+		if q.timer != nil {
+			q.timer.Stop()
+			q.timer = nil
+		}
+
+		// schedule the next attempt.
+		if err := q.schedule(ctx); err != nil {
+			log.ErrorContext(ctx).
+				Err(err).
+				Msg("could not schedule outbound delivery attempt")
+		}
+	}
+}
+
+// schedule finds the next pending mail. If any is present, an attempt is scheduled.
+func (q *Queue) schedule(ctx context.Context) error {
+	tx, err := q.database.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	mail, err := queries.FindNextPendingMail(tx)
+	if err != nil {
+		// if no pending mail exists, do not schedule an attempt.
+		if storage.IsErrNoRows(err) {
+			log.DebugContext(ctx).Msg("no mail is pending")
+			return nil
+		}
+
+		return err
+	}
+
+	attemptAt := q.determineNextAttemptTime(mail)
+	waitDuration := time.Until(attemptAt)
+
+	if waitDuration < 0 {
+		// if the next attempt should have already happend, schedule it now.
+		waitDuration = 0
+	}
+
+	log.InfoContext(ctx).
+		Str("mail", mail.ID).
+		Int("attempts", mail.Attempts).
+		Dur("waitDuration", waitDuration).
+		Msg("scheduling delivery attempt")
+
+	// execute attemptMail using the timer, even if waitDuration is 0, because we are currently
+	// holding a lock. If we call it directly, we have a deadlock.
+	q.timer = time.AfterFunc(waitDuration, q.attemptDelivery(mail))
+
+	return tx.Commit()
+}
+
+// determineNextAttemptTime calculates the time for the next delivery attempt of a mail. The next
+// attempt is at `LastAttemptTime + delay(attempt)`. The first attempt has no delay.
+func (q *Queue) determineNextAttemptTime(mail *storage.Mail) time.Time {
+	scheduleTime := mail.ReceivedAt
+
+	if mail.LastAttemptedAt.Valid {
+		scheduleTime = mail.LastAttemptedAt.Int64
+
+		if mail.Attempts < len(q.delaysInSeconds) {
+			scheduleTime += q.delaysInSeconds[mail.Attempts]
+		} else {
+			scheduleTime += q.delaysInSeconds[len(q.delaysInSeconds)-1]
+		}
+	}
+
+	return time.Unix(scheduleTime, 0)
+}
+
+func (q *Queue) attemptDelivery(mail *storage.Mail) func() {
+	ctx := context.TODO()
+	ctx = log.WithOrigin(ctx, "queue")
+
+	return func() {
+		if q.setBusy(true) {
+			log.WarnContext(ctx).
+				Str("mail", mail.ID).
+				Msg("another attempt is already in progress")
+
+			return
+		}
+
+		result, err := q.courier.SendMail(ctx, mail)
+		if err != nil {
+			log.ErrorContext(ctx).
+				Err(err).
+				Msg("could not attempt delivery")
+		} else {
+			q.handleDeliveryResult(ctx, mail, result)
+		}
+
+		q.setBusy(false)
+		q.WakeUp(ctx)
+	}
+}
+
+func (q *Queue) handleDeliveryResult(ctx context.Context, mail *storage.Mail, result SendResult) {
+	var (
+		hasPending = result.check(SomePending)
+		hasFailed  = result.check(SomeFailed)
+	)
+
+	if hasPending {
+		log.InfoContext(ctx).
+			Str("mail", mail.ID).
+			Msg("there are still pending recipients")
+	}
+
+	if hasFailed {
+		log.WarnContext(ctx).
+			Str("mail", mail.ID).
+			Msg("some recipients failed. notification mail is not yet implemented")
+	}
+}
+
+func (q *Queue) setBusy(busy bool) (wasBusy bool) {
+	defer q.mu.Unlock()
+	q.mu.Lock()
+
+	wasBusy, q.busy = q.busy, busy
+	return
+}

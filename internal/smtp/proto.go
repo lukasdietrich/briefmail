@@ -33,6 +33,10 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
+func init() {
+	viper.SetDefault("mail.sizelimit", 5242880) // 5 megabye
+}
+
 // Proto is a smtp server protocol implementation.
 type Proto struct {
 	handlerMap map[string]handler
@@ -50,7 +54,7 @@ func New(
 ) *Proto {
 	var (
 		hostname = viper.GetString("general.hostname")
-		maxSize  = viper.GetInt64("mail.size")
+		maxSize  = viper.GetInt64("mail.sizelimit")
 	)
 
 	return &Proto{

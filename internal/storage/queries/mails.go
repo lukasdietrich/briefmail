@@ -28,14 +28,16 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 			"deleted_at" ,
 			"return_path" ,
 			"size" ,
-			"attempt"
+			"attempts" ,
+			"last_attempted_at"
 		) values (
 			:id ,
 			:received_at ,
 			:deleted_at ,
 			:return_path ,
 			:size ,
-			:attempt
+			:attempts ,
+			:last_attempted_at
 		) ;
 	`
 
@@ -47,11 +49,12 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 func UpdateMail(tx *storage.Tx, mail *storage.Mail) error {
 	const query = `
 		update "mails"
-		set "received_at" = :received_at ,
-			"deleted_at"  = :deleted_at ,
-			"return_path" = :return_path ,
-			"size"        = :size ,
-			"attempt"     = :attempt
+		set "received_at"       = :received_at ,
+			"deleted_at"        = :deleted_at ,
+			"return_path"       = :return_path ,
+			"size"              = :size ,
+			"attempts"          = :attempts ,
+			"last_attempted_at" = :last_attempted_at
 		where "id" = :id ;
 	`
 
@@ -82,10 +85,31 @@ func FindDeletableMails(tx *storage.Tx) ([]storage.Mail, error) {
 		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
 		where "mails"."deleted_at" is null
 		group by "mails"."id"
-		having max("recipients"."status") <= $1
+		having count(iif("recipients"."status" in ($1, $2)), null, 1) = 0
 		order by "mails"."received_at" asc ;
 	`
 
 	var mailSlice []storage.Mail
-	return mailSlice, tx.Select(&mailSlice, query, storage.MaxCompletedStatus)
+	return mailSlice, tx.Select(&mailSlice, query, storage.StatusDelivered, storage.StatusFailed)
+}
+
+// FindNextPendingMail returns the next mail with at least one pending recipient.
+func FindNextPendingMail(tx *storage.Tx) (*storage.Mail, error) {
+	const query = `
+		select "mails".*
+		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
+		where "mails"."deleted_at" is null
+		  and "recipients"."status" = $1
+		order by "mails"."last_attempted_at" asc ,
+		         "mails"."attempts" asc ,
+		         "mails"."received_at" asc
+		limit 1 ;
+	`
+
+	var mail storage.Mail
+	if err := tx.Get(&mail, query, storage.StatusPending); err != nil {
+		return nil, err
+	}
+
+	return &mail, nil
 }

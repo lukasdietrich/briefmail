@@ -49,7 +49,7 @@ func UpdateRecipient(tx *storage.Tx, recipient *storage.Recipient) error {
 	const query = `
 		update "recipients"
 		set "mail_id"      = :mail_id ,
-		    "mailbox_id"   = :maibox_id ,
+		    "mailbox_id"   = :mailbox_id ,
 		    "forward_path" = :forward_path ,
 		    "status"       = :status
 		where "id" = :id ;
@@ -71,4 +71,17 @@ func UpdateRecipientsDelivered(tx *storage.Tx, mailbox *storage.Mailbox, mail *s
 
 	_, err := tx.Exec(query, storage.StatusDelivered, mail.ID, mailbox.ID)
 	return err
+}
+
+// FindPendingRecipients returns all pending recipients of a mail.
+func FindPendingRecipients(tx *storage.Tx, mail *storage.Mail) ([]storage.Recipient, error) {
+	const query = `
+		select *
+		from "recipients"
+		where "mail_id" = $1
+		  and "status" = $2 ;
+	`
+
+	var recipientSlice []storage.Recipient
+	return recipientSlice, tx.Select(&recipientSlice, query, mail.ID, storage.StatusPending)
 }

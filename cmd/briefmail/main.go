@@ -54,6 +54,7 @@ var (
 
 func init() {
 	viper.SetDefault("log.level", "debug")
+	viper.SetDefault("general.hostname", "localhost")
 }
 
 func main() {

@@ -26,12 +26,12 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
 
-// Mailman is handles the delivery of local mails into mailboxes as well as
-// queuing outbound delivery.
+// Mailman handles the delivery of local mails into mailboxes as well as queuing outbound delivery.
 type Mailman struct {
 	database    *storage.Database
 	blobs       *storage.Blobs
 	addressbook *Addressbook
+	queue       *Queue
 }
 
 // NewMailman creates a new mailman for delivery.
@@ -39,11 +39,13 @@ func NewMailman(
 	database *storage.Database,
 	blobs *storage.Blobs,
 	addressbook *Addressbook,
+	queue *Queue,
 ) *Mailman {
 	return &Mailman{
 		database:    database,
 		blobs:       blobs,
 		addressbook: addressbook,
+		queue:       queue,
 	}
 }
 
@@ -87,7 +89,12 @@ func (m *Mailman) Deliver(ctx context.Context, envelope mails.Envelope, content 
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	m.queue.WakeUp(ctx)
+	return nil
 }
 
 // rollbackBlob is used to rollback the mail blob, if an error occurs during delivery. Further
@@ -119,7 +126,7 @@ func (m *Mailman) deliverTo(ctx context.Context, tx *storage.Tx, mailID string, 
 
 	recipient := storage.Recipient{
 		MailID:      mailID,
-		ForwardPath: to.String(),
+		ForwardPath: to,
 	}
 
 	switch {
