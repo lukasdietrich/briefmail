@@ -3,8 +3,8 @@ on: push
 
 jobs:
 
-  build:
-    name: Build with Go ${{ matrix.go }}
+  ci:
+    name: CI with Go ${{ matrix.go }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -27,44 +27,8 @@ jobs:
       - name: Build
         run: make build
 
-  test:
-    name: Test with Go ${{ matrix.go }}
-    needs: build
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        go: [ 1.15 ]
-
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-
-      - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go }}
-
       - name: Test
         run: go test ./...
-
-  lint:
-    name: Lint with Go ${{ matrix.go }}
-    needs: build
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        go: [ 1.15 ]
-
-    steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v2
-
-      - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go }}
 
       - name: Install lint tools
         run: |
