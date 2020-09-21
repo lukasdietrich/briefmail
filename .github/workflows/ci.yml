@@ -1,0 +1,59 @@
+name: CI
+on: push
+
+jobs:
+
+  checkout:
+    name: Checkout
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+  build:
+    name: Build with Go ${{ matrix.go }}
+    needs: checkout
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        go: [ 1.13, 1.14 ]
+
+    steps:
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Install build tools
+        run: |
+          go get github.com/google/wire/cmd/wire
+
+      - name: Build
+        run: make build
+
+  test:
+    name: Test
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Test
+        run: go test ./...
+
+  lint:
+    name: Lint
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install lint tools
+        run: |
+          go get golang.org/x/lint/golint
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golint
+        run: golint -set_exit_status ./...
