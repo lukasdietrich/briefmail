@@ -3,24 +3,18 @@ on: push
 
 jobs:
 
-  checkout:
-    name: Checkout
+  build:
+    name: Build with Go ${{ matrix.go }}
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        go: [ 1.13, 1.14, 1.15 ]
 
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
 
-  build:
-    name: Build with Go ${{ matrix.go }}
-    needs: checkout
-    runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        go: [ 1.13, 1.14 ]
-
-    steps:
       - name: Set up Go ${{ matrix.go }}
         uses: actions/setup-go@v2
         with:
@@ -34,20 +28,44 @@ jobs:
         run: make build
 
   test:
-    name: Test
+    name: Test with Go ${{ matrix.go }}
     needs: build
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        go: [ 1.15 ]
+
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+
       - name: Test
         run: go test ./...
 
   lint:
-    name: Lint
+    name: Lint with Go ${{ matrix.go }}
     needs: build
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        go: [ 1.15 ]
+
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Set up Go ${{ matrix.go }}
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+
       - name: Install lint tools
         run: |
           go get golang.org/x/lint/golint
