@@ -16,11 +16,9 @@
 package certs
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,10 +35,5 @@ func TestCertSourceNone(t *testing.T) {
 
 	config, err := NewTLSConfig()
 	require.NoError(t, err)
-	require.NotNil(t, config)
-
-	cert, err := config.GetCertificate(nil)
-	assert.Error(t, err)
-	assert.Nil(t, cert)
-	assert.True(t, errors.Is(err, errCertSourceNone))
+	require.Nil(t, config)
 }

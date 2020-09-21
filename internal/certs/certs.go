@@ -44,7 +44,7 @@ type certSource interface {
 func newCertSource() (certSource, error) {
 	switch source := viper.GetString("tls.source"); source {
 	case sourceNone:
-		return noneCertSource{}, nil
+		return nil, nil
 	case sourceFiles:
 		return newFilesCertSource(), nil
 	case sourceTraefik:
@@ -55,12 +55,16 @@ func newCertSource() (certSource, error) {
 }
 
 // NewTLSConfig creates a tls config, which can dynamically load certificates.
-// When the configured certificate source indicates an update, the new
-// certificate is loaded and returned.
+// When the configured certificate source indicates an update, the new certificate is loaded and
+// returned.
 func NewTLSConfig() (*tls.Config, error) {
 	source, err := newCertSource()
 	if err != nil {
 		return nil, err
+	}
+
+	if source == nil {
+		return nil, nil
 	}
 
 	var (
@@ -76,15 +80,13 @@ func NewTLSConfig() (*tls.Config, error) {
 
 			newTime, err := source.lastUpdate()
 			if err != nil {
-				return nil, fmt.Errorf(
-					"could not check for certificate updates: %w", err)
+				return nil, fmt.Errorf("could not check for certificate updates: %w", err)
 			}
 
 			if newTime.After(lastTime) {
 				newCert, err := source.load()
 				if err != nil {
-					return nil, fmt.Errorf(
-						"could not load certificate: %w", err)
+					return nil, fmt.Errorf("could not load certificate: %w", err)
 				}
 
 				lastTime = newTime

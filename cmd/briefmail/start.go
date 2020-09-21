@@ -152,6 +152,13 @@ func (i *instanceManager) start() error {
 
 			var tlsConfig *tls.Config
 			if config.TLS {
+				if i.tlsConfig == nil {
+					log.Fatal().
+						Str("protocol", protoName).
+						Str("address", config.Address).
+						Msg("tls required, but no certificate source configured")
+				}
+
 				tlsConfig = i.tlsConfig
 			}
 
