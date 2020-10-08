@@ -28,7 +28,7 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 			"deleted_at" ,
 			"return_path" ,
 			"size" ,
-			"attempts" ,
+			"attempt_count" ,
 			"last_attempted_at"
 		) values (
 			:id ,
@@ -36,7 +36,7 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 			:deleted_at ,
 			:return_path ,
 			:size ,
-			:attempts ,
+			:attempt_count ,
 			:last_attempted_at
 		) ;
 	`
@@ -53,7 +53,7 @@ func UpdateMail(tx *storage.Tx, mail *storage.Mail) error {
 			"deleted_at"        = :deleted_at ,
 			"return_path"       = :return_path ,
 			"size"              = :size ,
-			"attempts"          = :attempts ,
+			"attempt_count"     = :attempt_count ,
 			"last_attempted_at" = :last_attempted_at
 		where "id" = :id ;
 	`
@@ -101,7 +101,7 @@ func FindNextPendingMail(tx *storage.Tx) (*storage.Mail, error) {
 		where "mails"."deleted_at" is null
 		  and "recipients"."status" = $1
 		order by "mails"."last_attempted_at" asc ,
-		         "mails"."attempts" asc ,
+		         "mails"."attempt_count" asc ,
 		         "mails"."received_at" asc
 		limit 1 ;
 	`

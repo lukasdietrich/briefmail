@@ -15,13 +15,20 @@
 
 package queries
 
-import "github.com/lukasdietrich/briefmail/internal/storage"
+import (
+	"database/sql"
+
+	"github.com/lukasdietrich/briefmail/internal/storage"
+)
 
 // InsertMailbox inserts a new mailbox.
 func InsertMailbox(tx *storage.Tx, mailbox *storage.Mailbox) error {
 	const query = `
-		insert into "mailboxes" ( "hash" )
-		values ( :hash ) ;
+		insert into "mailboxes" (
+			"display_name"
+		) values (
+			:display_name
+		) ;
 	`
 
 	result, err := tx.NamedExec(query, mailbox)
@@ -31,6 +38,57 @@ func InsertMailbox(tx *storage.Tx, mailbox *storage.Mailbox) error {
 
 	mailbox.ID, err = result.LastInsertId()
 	return err
+}
+
+// UpdateMailbox updates an existing mailbox.
+func UpdateMailbox(tx *storage.Tx, mailbox *storage.Mailbox) error {
+	const query = `
+		update "mailboxes"
+		set "display_name" = :display_name
+		where "id" = :id ;
+	`
+
+	_, err := tx.NamedExec(query, mailbox)
+	return err
+}
+
+// DeleteMailbox deletes an existing mailbox.
+func DeleteMailbox(tx *storage.Tx, mailbox *storage.Mailbox) error {
+	const query = `
+		delete from "mailboxes"
+		where "id" = :id ;
+	`
+
+	result, err := tx.NamedExec(query, mailbox)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+// FindMailboxes returns all mailboxes.
+func FindMailboxes(tx *storage.Tx) ([]storage.Mailbox, error) {
+	const query = `
+		select *
+		from "mailboxes" ;
+	`
+
+	var mailboxSlice []storage.Mailbox
+	if err := tx.Select(&mailboxSlice, query); err != nil {
+		return nil, err
+	}
+
+	return mailboxSlice, nil
 }
 
 // FindMailboxByAddress returns the mailbox of the address matching the local-part and domain.
@@ -46,5 +104,10 @@ func FindMailboxByAddress(tx *storage.Tx, localPart, domain string) (*storage.Ma
 	`
 
 	var mailbox storage.Mailbox
-	return &mailbox, tx.Get(&mailbox, query, localPart, domain)
+
+	if err := tx.Get(&mailbox, query, localPart, domain); err != nil {
+		return nil, err
+	}
+
+	return &mailbox, nil
 }

@@ -142,7 +142,7 @@ func (q *Queue) schedule(ctx context.Context) error {
 
 	log.InfoContext(ctx).
 		Str("mail", mail.ID).
-		Int("attempts", mail.Attempts).
+		Int("attemptCount", mail.AttemptCount).
 		Dur("waitDuration", waitDuration).
 		Msg("scheduling delivery attempt")
 
@@ -161,8 +161,8 @@ func (q *Queue) determineNextAttemptTime(mail *storage.Mail) time.Time {
 	if mail.LastAttemptedAt.Valid {
 		scheduleTime = mail.LastAttemptedAt.Int64
 
-		if mail.Attempts < len(q.delaysInSeconds) {
-			scheduleTime += q.delaysInSeconds[mail.Attempts]
+		if mail.AttemptCount < len(q.delaysInSeconds) {
+			scheduleTime += q.delaysInSeconds[mail.AttemptCount]
 		} else {
 			scheduleTime += q.delaysInSeconds[len(q.delaysInSeconds)-1]
 		}

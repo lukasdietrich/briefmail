@@ -15,7 +15,11 @@
 
 package queries
 
-import "github.com/lukasdietrich/briefmail/internal/storage"
+import (
+	"database/sql"
+
+	"github.com/lukasdietrich/briefmail/internal/storage"
+)
 
 // InsertAddress inserts a new address.
 func InsertAddress(tx *storage.Tx, address *storage.Address) error {
@@ -31,6 +35,30 @@ func InsertAddress(tx *storage.Tx, address *storage.Address) error {
 
 	address.ID, err = result.LastInsertId()
 	return err
+}
+
+// DeleteAddress deletes an existing address.
+func DeleteAddress(tx *storage.Tx, address *storage.Address) error {
+	const query = `
+		delete from "addresses"
+		where "id" = :id ;
+	`
+
+	result, err := tx.NamedExec(query, address)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 // ExistsAddress checks if an address exists.
@@ -68,14 +96,31 @@ func FindAddress(tx *storage.Tx, localPart, domain string) (*storage.Address, er
 	return &address, tx.Get(&address, query, localPart, domain)
 }
 
-// FindAddressesByDomain returns all addresses matching the domain.
-func FindAddressesByDomain(tx *storage.Tx, domain string) ([]storage.Address, error) {
+// AddressWithDomain is a helper type to eagerly fetch the domain name of an address.
+type AddressWithDomain struct {
+	storage.Address
+	DomainName string `db:"domain_name"`
+}
+
+// FindAddresses returns all addresses including their domain name.
+func FindAddresses(tx *storage.Tx) ([]AddressWithDomain, error) {
 	const query = `
-		select "addresses".*
-		from "addresses" inner join "domains" on "addresses"."domain_id" = "domains"."id"
-		where "domains"."name" = $1 ;
+		select "addresses".*, "domains"."name" as "domain_name"
+		from "addresses" inner join "domains" on "addresses"."domain_id" = "domains"."id" ;
 	`
 
-	var addressSlice []storage.Address
-	return addressSlice, tx.Select(&addressSlice, query, domain)
+	var addressSlice []AddressWithDomain
+	return addressSlice, tx.Select(&addressSlice, query)
+}
+
+// FindAddressesWithDomain returns all addresses including their domain name by mailbox.
+func FindAddressesByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]AddressWithDomain, error) {
+	const query = `
+		select "addresses".*, "domains"."name" as "domain_name"
+		from "addresses" inner join "domains" on "addresses"."domain_id" = "domains"."id"
+		where "addresses"."mailbox_id" = $1 ;
+	`
+
+	var addressSlice []AddressWithDomain
+	return addressSlice, tx.Select(&addressSlice, query, mailbox.ID)
 }

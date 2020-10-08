@@ -80,7 +80,7 @@ func NewCourier(database *storage.Database, blobs *storage.Blobs) *Courier {
 func (c *Courier) SendMail(ctx context.Context, mail *storage.Mail) (SendResult, error) {
 	log.InfoContext(ctx).
 		Str("mail", mail.ID).
-		Int("attempts", mail.Attempts).
+		Int("attemptCount", mail.AttemptCount).
 		Msg("attempting to send to pending recipients")
 
 	var result SendResult
@@ -113,7 +113,7 @@ func (c *Courier) saveAttempt(ctx context.Context, mail *storage.Mail, recipient
 
 	defer tx.Rollback()
 
-	mail.Attempts++
+	mail.AttemptCount++
 	mail.LastAttemptedAt.Int64 = time.Now().Unix()
 	mail.LastAttemptedAt.Valid = true
 

@@ -23,8 +23,15 @@ import (
 
 // Mailbox is the entity for the "mailboxes" table.
 type Mailbox struct {
-	ID   int64  `db:"id"`
-	Hash string `db:"hash"`
+	ID          int64  `db:"id"`
+	DisplayName string `db:"display_name"`
+}
+
+// MailboxCredentials is the entity for the "mailbox_passwords" table.
+type MailboxCredentials struct {
+	MailboxID int64  `db:"mailbox_id"`
+	UpdatedAt int64  `db:"updated_at"`
+	Hash      string `db:"hash"`
 }
 
 // Mail is the entity for the "mails" table.
@@ -34,7 +41,7 @@ type Mail struct {
 	DeletedAt       sql.NullInt64 `db:"deleted_at"`
 	ReturnPath      string        `db:"return_path"`
 	Size            int64         `db:"size"`
-	Attempts        int           `db:"attempts"`
+	AttemptCount    int           `db:"attempt_count"`
 	LastAttemptedAt sql.NullInt64 `db:"last_attempted_at"`
 }
 

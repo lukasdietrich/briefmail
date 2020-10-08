@@ -48,7 +48,7 @@ func NewAuthenticator(database *storage.Database) *Authenticator {
 // password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
 // may occur.
 func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.Mailbox, error) {
-	mailbox, err := a.lookup(ctx, name)
+	result, err := a.lookup(ctx, name)
 	if err != nil {
 		if isErrUnknownAddress(err) {
 			log.WarnContext(ctx).
@@ -61,7 +61,7 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.M
 		return nil, err
 	}
 
-	if err := crypto.Verify(mailbox, pass); err != nil {
+	if err := crypto.Verify(result.credentials, pass); err != nil {
 		if errors.Is(err, crypto.ErrPasswordMismatch) {
 			log.WarnContext(ctx).
 				Bytes("name", name).
@@ -73,10 +73,15 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.M
 		return nil, err
 	}
 
-	return mailbox, nil
+	return result.mailbox, nil
 }
 
-func (a *Authenticator) lookup(ctx context.Context, name []byte) (*storage.Mailbox, error) {
+type mailboxWithCredentials struct {
+	mailbox     *storage.Mailbox
+	credentials *storage.MailboxCredentials
+}
+
+func (a *Authenticator) lookup(ctx context.Context, name []byte) (*mailboxWithCredentials, error) {
 	addr, err := mails.ParseNormalized(string(name))
 	if err != nil {
 		return nil, err
@@ -94,7 +99,17 @@ func (a *Authenticator) lookup(ctx context.Context, name []byte) (*storage.Mailb
 		return nil, err
 	}
 
-	return mailbox, tx.Commit()
+	credentials, err := queries.FindMailboxCredentials(tx, mailbox)
+	if err != nil {
+		return nil, err
+	}
+
+	result := mailboxWithCredentials{
+		mailbox:     mailbox,
+		credentials: credentials,
+	}
+
+	return &result, tx.Commit()
 }
 
 func isErrUnknownAddress(err error) bool {

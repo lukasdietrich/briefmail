@@ -23,6 +23,7 @@ import (
 
 	rice "github.com/GeertJohan/go.rice"
 	"github.com/jmoiron/sqlx"
+	"github.com/mattn/go-sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
 	"github.com/spf13/viper"
 
@@ -48,8 +49,12 @@ func init() {
 // `storage.database.filename` is the filename for the sqlite database.
 // `storage.database.journalmode` will be used for the journalmode pragma.
 func OpenDatabase() (*Database, error) {
+	sqliteVersion, _, _ := sqlite3.Version()
+
 	dsn := createDataSourceName()
 	log.Info().
+		Str("driver", driverName).
+		Str("version", sqliteVersion).
 		Str("dataSourceName", dsn).
 		Msg("connecting to database")
 

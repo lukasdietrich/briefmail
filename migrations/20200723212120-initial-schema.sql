@@ -2,8 +2,19 @@
 -- +migrate Up
 
 create table "mailboxes" (
-	"id"   integer not null primary key autoincrement ,
-	"hash" varchar not null
+	"id"           integer not null primary key autoincrement ,
+	"display_name" varchar not null
+) ;
+
+create unique index "idx_mailboxes_unique_display_name"
+	on "mailboxes" ( "display_name" ) ;
+
+create table "mailbox_credentials" (
+	"mailbox_id" integer not null primary key ,
+	"updated_at" integer not null ,
+	"hash"       varchar not null ,
+
+	foreign key ( "mailbox_id" ) references "mailboxes" ( "id" ) on delete cascade
 ) ;
 
 create table "mails" (
@@ -12,7 +23,7 @@ create table "mails" (
 	"deleted_at"        integer ,
 	"return_path"       varchar not null ,
 	"size"              integer not null ,
-	"attempts"          integer not null ,
+	"attempt_count"     integer not null ,
 	"last_attempted_at" integer
 ) ;
 

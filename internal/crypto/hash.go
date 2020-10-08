@@ -33,9 +33,9 @@ func init() {
 	viper.SetDefault("crypto.argon2.threads", 4)
 }
 
-// Hash applies the argon2id hashing algorithm to a password and stores the hash in the mailbox.
+// Hash applies the argon2id hashing algorithm to a password and stores the hash in the credentials.
 // The options used for hashing are determined using viper.
-func Hash(mailbox *storage.Mailbox, pass []byte) (err error) {
+func Hash(creds *storage.MailboxCredentials, pass []byte) (err error) {
 	opts := argon2go.Options{
 		Time:       viper.GetUint32("crypto.argon2.time"),
 		Memory:     viper.GetUint32("crypto.argon2.memory"),
@@ -44,12 +44,12 @@ func Hash(mailbox *storage.Mailbox, pass []byte) (err error) {
 		SaltLength: viper.GetUint32("crypto.argon2.saltlength"),
 	}
 
-	mailbox.Hash, err = argon2go.Hash(pass, &opts)
+	creds.Hash, err = argon2go.Hash(pass, &opts)
 	return
 }
 
-// Verify checks if a password matches the mailboxes hash. If the password does not match
+// Verify checks if a password matches the credentials hash. If the password does not match
 // ErrPasswordMismatch is returned. There may occur other, technical errors.
-func Verify(mailbox *storage.Mailbox, pass []byte) error {
-	return argon2go.Verify(pass, mailbox.Hash)
+func Verify(creds *storage.MailboxCredentials, pass []byte) error {
+	return argon2go.Verify(pass, creds.Hash)
 }

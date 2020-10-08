@@ -23,6 +23,7 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/certs"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/pop3"
+	"github.com/lukasdietrich/briefmail/internal/shell"
 	"github.com/lukasdietrich/briefmail/internal/smtp"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
@@ -59,5 +60,6 @@ func newShellCommand() (*shellCommand, error) {
 		wire.Struct(new(shellCommand), "*"),
 
 		storage.OpenDatabase,
+		shell.NewShell,
 	))
 }

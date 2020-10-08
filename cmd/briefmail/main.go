@@ -40,8 +40,8 @@ Version:
   %s
 
 Commands:
-  start     Start the briefmail server
-  shell     Start an interactive administration shell
+  start     Start the briefmail server.
+  shell     Start an interactive administration shell.
 
 Options:
 %s
@@ -69,12 +69,12 @@ func main() {
 	flags.StringVarP(&configFilename,
 		"config", "c",
 		"",
-		"Path to a configuration file")
+		"Path to a configuration file.")
 
 	flags.BoolVar(&enableConsoleLogger,
 		"pretty-console-logger",
 		false,
-		"Enable pretty, but inefficient console logger")
+		"Enable pretty, but inefficient console logger.")
 
 	if err := flags.Parse(os.Args); err != nil {
 		if errors.Is(err, pflag.ErrHelp) {
@@ -85,12 +85,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	if enableConsoleLogger {
-		log.Logger = log.Logger.Output(zerolog.NewConsoleWriter())
-	}
-
 	switch commandName := flags.Arg(1); commandName {
-	case "start", "shell":
+	case "shell":
+		enableConsoleLogger = true
+		fallthrough
+	case "start":
+		if enableConsoleLogger {
+			log.Logger = log.Logger.Output(zerolog.NewConsoleWriter())
+		}
+
 		setupConfig(configFilename)
 		setupLogLevel()
 		runCommand(commandName)

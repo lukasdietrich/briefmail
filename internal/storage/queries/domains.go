@@ -37,14 +37,26 @@ func InsertDomain(tx *storage.Tx, domain *storage.Domain) error {
 	return err
 }
 
-// DeleteDomain removes an existing domain.
-func DeleteDomain(tx *storage.Tx, name string) error {
+// UpdateDomain updates an existing domain.
+func UpdateDomain(tx *storage.Tx, domain *storage.Domain) error {
 	const query = `
-		delete from "domains"
-		where "name" = $1 ;
+		update "domains"
+		set "name" = :name
+		where "id" = :id ;
 	`
 
-	result, err := tx.Exec(query, name)
+	_, err := tx.NamedExec(query, domain)
+	return err
+}
+
+// DeleteDomain removes an existing domain.
+func DeleteDomain(tx *storage.Tx, domain *storage.Domain) error {
+	const query = `
+		delete from "domains"
+		where "id" = :id ;
+	`
+
+	result, err := tx.NamedExec(query, domain)
 	if err != nil {
 		return err
 	}
@@ -79,19 +91,6 @@ func ExistsDomain(tx *storage.Tx, name string) (bool, error) {
 	}
 
 	return exists, nil
-}
-
-// FindDomain returns the domain matching the name.
-func FindDomain(tx *storage.Tx, name string) (*storage.Domain, error) {
-	const query = `
-		select *
-		from "domains"
-		where "name" = $1
-		limit 1 ;
-	`
-
-	var domain storage.Domain
-	return &domain, tx.Get(&domain, query, name)
 }
 
 // FindDomains returns all domains sorted by name.
