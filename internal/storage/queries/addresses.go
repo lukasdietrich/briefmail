@@ -113,7 +113,7 @@ func FindAddresses(tx *storage.Tx) ([]AddressWithDomain, error) {
 	return addressSlice, tx.Select(&addressSlice, query)
 }
 
-// FindAddressesWithDomain returns all addresses including their domain name by mailbox.
+// FindAddressesByMailbox returns all addresses including their domain name by mailbox.
 func FindAddressesByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]AddressWithDomain, error) {
 	const query = `
 		select "addresses".*, "domains"."name" as "domain_name"
