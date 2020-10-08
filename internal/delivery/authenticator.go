@@ -18,6 +18,9 @@ package delivery
 import (
 	"context"
 	"errors"
+	"time"
+
+	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/internal/crypto"
 	"github.com/lukasdietrich/briefmail/internal/log"
@@ -32,15 +35,23 @@ var (
 	ErrWrongAddressPassword = errors.New("wrong address or password combination")
 )
 
+func init() {
+	viper.SetDefault("security.auth.minDuration", "5s")
+}
+
 // Authenticator is for authentication of users based on their addresses.
 type Authenticator struct {
 	database *storage.Database
+
+	minDuration time.Duration
 }
 
 // NewAuthenticator creates a new Authenticator.
 func NewAuthenticator(database *storage.Database) *Authenticator {
 	return &Authenticator{
 		database: database,
+
+		minDuration: viper.GetDuration("security.auth.minDuration"),
 	}
 }
 
@@ -48,6 +59,9 @@ func NewAuthenticator(database *storage.Database) *Authenticator {
 // password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
 // may occur.
 func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.Mailbox, error) {
+	startTime := time.Now()
+	defer a.ensureMinDuration(startTime)
+
 	result, err := a.lookup(ctx, name)
 	if err != nil {
 		if isErrUnknownAddress(err) {
@@ -74,6 +88,15 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.M
 	}
 
 	return result.mailbox, nil
+}
+
+func (a *Authenticator) ensureMinDuration(start time.Time) {
+	elapsed := time.Since(start)
+	remaining := a.minDuration - elapsed
+
+	if remaining > 0 {
+		time.Sleep(remaining)
+	}
 }
 
 type mailboxWithCredentials struct {
