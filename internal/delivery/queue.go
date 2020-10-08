@@ -34,8 +34,8 @@ var (
 )
 
 func init() {
-	viper.SetDefault("mail.queue.delays", []int{20, 20, 20, 60, 180, 600})
-	viper.SetDefault("mail.queue.giveUpAfter", 4320) // 3 days
+	viper.SetDefault("mail.queue.delays", []string{"20m", "20m", "20m", "1h", "3h", "10h"})
+	viper.SetDefault("mail.queue.giveUpAfter", "72h") // 3 days
 }
 
 // Queue coordinates the delivery attempts of outbound mails.
@@ -55,23 +55,33 @@ type Queue struct {
 // NewQueue creates a new Queue.
 func NewQueue(database *storage.Database, courier *Courier, cleaner *Cleaner) (*Queue, error) {
 	var (
-		delaysInMinutes    = viper.GetIntSlice("mail.queue.delays")
-		giveUpAfterMinutes = viper.GetInt("mail.queue.giveUpAfter")
+		delays      = viper.GetStringSlice("mail.queue.delays")
+		giveUpAfter = viper.GetDuration("mail.queue.giveUpAfter")
 
-		delaysInSeconds    = make([]int64, len(delaysInMinutes))
-		giveUpAfterSeconds = int64(giveUpAfterMinutes) * 60
+		delaysInSeconds    = make([]int64, len(delays))
+		giveUpAfterSeconds = int64(giveUpAfter / time.Second)
 	)
 
-	if len(delaysInMinutes) == 0 {
+	if len(delays) == 0 {
 		return nil, fmt.Errorf("mail.queue.delays may not be empty")
 	}
 
-	if giveUpAfterMinutes <= 0 {
+	if giveUpAfterSeconds <= 0 {
 		return nil, fmt.Errorf("mail.queue.giveUpAfter must be positive")
 	}
 
-	for i, delayInMinutes := range delaysInMinutes {
-		delaysInSeconds[i] = int64(delayInMinutes) * 60
+	for i, delayString := range delays {
+		delayDuration, err := time.ParseDuration(delayString)
+		if err != nil {
+			return nil, err
+		}
+
+		delaySeconds := int64(delayDuration / time.Second)
+		if delaySeconds <= 0 {
+			return nil, fmt.Errorf("mail.queue.delays must include only durations '> 0s'")
+		}
+
+		delaysInSeconds[i] = delaySeconds
 	}
 
 	queue := Queue{
