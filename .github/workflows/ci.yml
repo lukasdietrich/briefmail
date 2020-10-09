@@ -28,14 +28,23 @@ jobs:
         run: make build
 
       - name: Test
-        run: go test ./...
+        run: |
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: Upload testcoverage
+        uses: codecov/codecov-action@v1
+        with:
+          name: Go ${{ matrix.go }}
+          fail_ci_if_error: true
 
       - name: Install lint tools
         run: |
           go get golang.org/x/lint/golint
 
       - name: go vet
-        run: go vet ./...
+        run: |
+          go vet ./...
 
       - name: golint
-        run: golint -set_exit_status ./...
+        run: |
+          golint -set_exit_status ./...
