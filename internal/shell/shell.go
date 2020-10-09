@@ -79,6 +79,11 @@ func NewShell(database *storage.Database) *Shell {
 						help:   "Delete an existing mailbox.",
 						action: deleteMailbox,
 					},
+					{
+						name:   "passwd",
+						help:   "Change the password of a mailbox.",
+						action: passwdMailbox,
+					},
 				},
 			},
 			{

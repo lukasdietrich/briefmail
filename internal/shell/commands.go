@@ -171,6 +171,34 @@ func deleteMailbox(ctx *cmdContext) error {
 	return nil
 }
 
+func passwdMailbox(ctx *cmdContext) error {
+	mailbox, err := selectOneMailbox(ctx)
+	if err != nil {
+		return err
+	}
+
+	newPassword, err := ctx.password("New password: ")
+	if err != nil {
+		return err
+	}
+
+	credentials := storage.MailboxCredentials{
+		MailboxID: mailbox.ID,
+		UpdatedAt: time.Now().Unix(),
+	}
+
+	if err := crypto.Hash(&credentials, newPassword); err != nil {
+		return err
+	}
+
+	if err := queries.UpsertMailboxCredentials(ctx.tx, &credentials); err != nil {
+		return err
+	}
+
+	ctx.info("Password for mailbox %q changed.", mailbox.DisplayName)
+	return nil
+}
+
 func addAddress(ctx *cmdContext) error {
 	localPart, err := ctx.ask("Local-part [local-part@domain]: ")
 	if err != nil {
