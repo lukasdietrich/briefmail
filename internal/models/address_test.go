@@ -16,6 +16,8 @@
 package models
 
 import (
+	"database/sql"
+	"database/sql/driver"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,4 +109,50 @@ func TestNormalizeLocalPart(t *testing.T) {
 		actual := NormalizeLocalPart(localPart)
 		assert.Equal(t, expected, actual)
 	}
+}
+
+func TestParseUnicode(t *testing.T) {
+	actual, err := ParseUnicode("someone@xn--dmin-moa0i.example")
+	assert.NoError(t, err)
+	assert.Equal(t, "someone@dömäin.example", actual.String())
+	assert.Equal(t, "someone", actual.LocalPart())
+	assert.Equal(t, "dömäin.example", actual.Domain())
+}
+
+func TestParseNormalized(t *testing.T) {
+	actual, err := ParseNormalized("\u0041\u030A+and+a+long+suffix@xn--dmin-moa0i.example")
+	assert.NoError(t, err)
+	assert.Equal(t, "\u00e5@dömäin.example", actual.String())
+	assert.Equal(t, "\u00e5", actual.LocalPart())
+	assert.Equal(t, "dömäin.example", actual.Domain())
+}
+
+func TestNormalizedCopy(t *testing.T) {
+	original, err := Parse("user+suffix@example.com")
+	assert.NoError(t, err)
+
+	normalized := original.Normalized()
+	assert.NotEqual(t, original, normalized)
+	assert.Equal(t, "user+suffix", original.LocalPart())
+	assert.Equal(t, "user", normalized.LocalPart())
+}
+
+func TestImplementsScanner(t *testing.T) {
+	addr := new(Address)
+	var scanner sql.Scanner = addr
+
+	assert.NoError(t, scanner.Scan("someone@example.com"))
+	assert.Equal(t, "someone", addr.LocalPart())
+	assert.Equal(t, "example.com", addr.Domain())
+}
+
+func TestImplementsValuer(t *testing.T) {
+	addr, err := Parse("someone@example.com")
+	assert.NoError(t, err)
+
+	var valuer driver.Valuer = addr
+
+	value, err := valuer.Value()
+	assert.NoError(t, err)
+	assert.Equal(t, "someone@example.com", value)
 }
