@@ -28,9 +28,10 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/log"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
 
 // SendResult indicates the status of delivery for a collection of recipients.
@@ -60,24 +61,33 @@ const (
 
 // Courier handles the delivery of outbound mails.
 type Courier struct {
-	database *storage.Database
-	blobs    *storage.Blobs
-	hostname string
+	database     database.Conn
+	mailDao      database.MailDao
+	recipientDao database.RecipientDao
+	blobs        *storage.Blobs
+	hostname     string
 }
 
 // NewCourier creates a new courier for delivery.
-func NewCourier(database *storage.Database, blobs *storage.Blobs) *Courier {
+func NewCourier(
+	db database.Conn,
+	mailDao database.MailDao,
+	recipientDao database.RecipientDao,
+	blobs *storage.Blobs,
+) *Courier {
 	return &Courier{
-		database: database,
-		blobs:    blobs,
-		hostname: viper.GetString("general.hostname"),
+		database:     db,
+		mailDao:      mailDao,
+		recipientDao: recipientDao,
+		blobs:        blobs,
+		hostname:     viper.GetString("general.hostname"),
 	}
 }
 
 // SendMail attempts to send a mail to all pending recipients. An error is only returned on database
 // errors. Other errors are logged but only affect the SendResult. After the attempt, the mail
 // attempt count and the status of all pending recipients is updated and stored in the database.
-func (c *Courier) SendMail(ctx context.Context, mail *storage.Mail) (SendResult, error) {
+func (c *Courier) SendMail(ctx context.Context, mail *models.MailEntity) (SendResult, error) {
 	log.InfoContext(ctx).
 		Str("mail", mail.ID).
 		Int("attemptCount", mail.AttemptCount).
@@ -105,8 +115,12 @@ func (c *Courier) SendMail(ctx context.Context, mail *storage.Mail) (SendResult,
 
 // saveAttempt updates the mail attempt count and writes it, as well as the status of all recipients
 // to the database.
-func (c *Courier) saveAttempt(ctx context.Context, mail *storage.Mail, recipients []recipientSlice) error {
-	tx, err := c.database.BeginTx(ctx)
+func (c *Courier) saveAttempt(
+	ctx context.Context,
+	mail *models.MailEntity,
+	groupedRecipients []recipientSlice,
+) error {
+	tx, err := c.database.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -117,13 +131,13 @@ func (c *Courier) saveAttempt(ctx context.Context, mail *storage.Mail, recipient
 	mail.LastAttemptedAt.Int64 = time.Now().Unix()
 	mail.LastAttemptedAt.Valid = true
 
-	if err := queries.UpdateMail(tx, mail); err != nil {
+	if err := c.mailDao.Update(ctx, tx, mail); err != nil {
 		return err
 	}
 
-	for _, recipients := range recipients {
+	for _, recipients := range groupedRecipients {
 		for _, recipient := range recipients {
-			if err := queries.UpdateRecipient(tx, &recipient); err != nil {
+			if err := c.recipientDao.Update(ctx, tx, &recipient); err != nil {
 				return err
 			}
 		}
@@ -135,7 +149,11 @@ func (c *Courier) saveAttempt(ctx context.Context, mail *storage.Mail, recipient
 // sendMailToDomain attempts to send a mail to all recipients of the same domain. This method
 // expects all recipients to have the same domain and therefore uses the domain of the first element
 // for the delivery to all recipients. This method does not return an error.
-func (c *Courier) sendMailToDomain(ctx context.Context, mail *storage.Mail, recipients recipientSlice) SendResult {
+func (c *Courier) sendMailToDomain(
+	ctx context.Context,
+	mail *models.MailEntity,
+	recipients recipientSlice,
+) SendResult {
 	domain := recipients[0].ForwardPath.Domain()
 
 	log.DebugContext(ctx).
@@ -175,7 +193,7 @@ func (c *Courier) sendMailToDomain(ctx context.Context, mail *storage.Mail, reci
 					Err(err).
 					Msg("delivery failed for all recipients permanently")
 
-				recipients.updateAllStatus(storage.StatusFailed)
+				recipients.updateAllStatus(models.StatusFailed)
 				return SomeFailed
 			}
 
@@ -197,7 +215,11 @@ func (c *Courier) sendMailToDomain(ctx context.Context, mail *storage.Mail, reci
 
 // sendMailToHost attempts to send a mail to an actual host. The host is the result of a previous
 // mx record lookup for the domain of the recipients.
-func (c *Courier) sendMailToHost(mail *storage.Mail, recipients recipientSlice, host string) error {
+func (c *Courier) sendMailToHost(
+	mail *models.MailEntity,
+	recipients recipientSlice,
+	host string,
+) error {
 	client, err := smtp.Dial(net.JoinHostPort(host, smtpPort))
 	if err != nil {
 		return err
@@ -221,7 +243,7 @@ func (c *Courier) sendMailToHost(mail *storage.Mail, recipients recipientSlice, 
 		return err
 	}
 
-	recipients.updatePendingStatus(storage.StatusDelivered)
+	recipients.updatePendingStatus(models.StatusDelivered)
 	return nil
 }
 
@@ -243,8 +265,12 @@ func (c *Courier) initClient(client *smtp.Client, host string) error {
 }
 
 // copyEnvelope sends the return- and forward-paths of the mail.
-func (c *Courier) copyEnvelope(client *smtp.Client, mail *storage.Mail, recipients recipientSlice) error {
-	if err := client.Mail(mail.ReturnPath); err != nil {
+func (c *Courier) copyEnvelope(
+	client *smtp.Client,
+	mail *models.MailEntity,
+	recipients recipientSlice,
+) error {
+	if err := client.Mail(mail.ReturnPath.String()); err != nil {
 		return err
 	}
 
@@ -252,7 +278,7 @@ func (c *Courier) copyEnvelope(client *smtp.Client, mail *storage.Mail, recipien
 		if err := client.Rcpt(recipient.ForwardPath.String()); err != nil {
 			switch {
 			case isPermanentErr(err):
-				recipients[i].Status = storage.StatusFailed
+				recipients[i].Status = models.StatusFailed
 
 			case isTransientErr(err):
 				// stay pending
@@ -267,7 +293,7 @@ func (c *Courier) copyEnvelope(client *smtp.Client, mail *storage.Mail, recipien
 }
 
 // copyData writes the mail content.
-func (c *Courier) copyData(client *smtp.Client, mail *storage.Mail) error {
+func (c *Courier) copyData(client *smtp.Client, mail *models.MailEntity) error {
 	w, err := client.Data()
 	if err != nil {
 		return err
@@ -309,7 +335,7 @@ func isTransientErr(err error) bool {
 
 // recipientSlice is a sortable slice of recipients.
 // The order is defined by their forward path domains.
-type recipientSlice []storage.Recipient
+type recipientSlice []models.RecipientEntity
 
 func (r recipientSlice) Len() int {
 	return len(r)
@@ -323,15 +349,15 @@ func (r recipientSlice) Less(i, j int) bool {
 	return r[i].ForwardPath.Domain() < r[j].ForwardPath.Domain()
 }
 
-func (r recipientSlice) updateAllStatus(status storage.DeliveryStatus) {
+func (r recipientSlice) updateAllStatus(status models.DeliveryStatus) {
 	for i := 0; i < len(r); i++ {
 		r[i].Status = status
 	}
 }
 
-func (r recipientSlice) updatePendingStatus(status storage.DeliveryStatus) {
+func (r recipientSlice) updatePendingStatus(status models.DeliveryStatus) {
 	for i, recipient := range r {
-		if recipient.Status == storage.StatusPending {
+		if recipient.Status == models.StatusPending {
 			r[i].Status = status
 		}
 	}
@@ -374,13 +400,13 @@ func (r recipientSlice) countResult() SendResult {
 
 	for _, recipient := range r {
 		switch recipient.Status {
-		case storage.StatusPending:
+		case models.StatusPending:
 			result.update(SomePending)
 
-		case storage.StatusFailed:
+		case models.StatusFailed:
 			result.update(SomeFailed)
 
-		case storage.StatusDelivered:
+		case models.StatusDelivered:
 			result.update(SomeSuccess)
 		}
 	}
@@ -388,20 +414,12 @@ func (r recipientSlice) countResult() SendResult {
 	return result
 }
 
-func (c *Courier) findRecipients(ctx context.Context, mail *storage.Mail) ([]recipientSlice, error) {
-	tx, err := c.database.BeginTx(ctx)
+func (c *Courier) findRecipients(
+	ctx context.Context,
+	mail *models.MailEntity,
+) ([]recipientSlice, error) {
+	recipients, err := c.recipientDao.FindPending(ctx, c.database, mail)
 	if err != nil {
-		return nil, err
-	}
-
-	defer tx.Rollback()
-
-	recipients, err := queries.FindPendingRecipients(tx, mail)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 

@@ -21,20 +21,23 @@ import (
 	"os"
 	"time"
 
+	"github.com/lukasdietrich/briefmail/internal/database"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
 )
 
 // Cleaner is a service to clean orphaned mail blobs and their database counterparts.
 type Cleaner struct {
-	database *storage.Database
+	database database.Conn
+	mailDao  database.MailDao
 	blobs    *storage.Blobs
 }
 
 // NewCleaner creates a new Cleaner.
-func NewCleaner(database *storage.Database, blobs *storage.Blobs) *Cleaner {
+func NewCleaner(db database.Conn, mailDao database.MailDao, blobs *storage.Blobs) *Cleaner {
 	return &Cleaner{
-		database: database,
+		database: db,
+		mailDao:  mailDao,
 		blobs:    blobs,
 	}
 }
@@ -42,14 +45,14 @@ func NewCleaner(database *storage.Database, blobs *storage.Blobs) *Cleaner {
 // Clean finds all orphaned mails and deletes them. An orphaned mail is a mail not assigned to a
 // mailbox and not queued for outbound delivery.
 func (c *Cleaner) Clean(ctx context.Context) error {
-	tx, err := c.database.BeginTx(ctx)
+	tx, err := c.database.Begin(ctx)
 	if err != nil {
 		return err
 	}
 
 	defer tx.Rollback()
 
-	mails, err := queries.FindDeletableMails(tx)
+	mails, err := c.mailDao.FindDeletable(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,7 @@ func (c *Cleaner) Clean(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (c *Cleaner) deleteMail(ctx context.Context, tx *storage.Tx, mail *storage.Mail) error {
+func (c *Cleaner) deleteMail(ctx context.Context, tx database.Tx, mail *models.MailEntity) error {
 	if err := c.blobs.Delete(ctx, mail.ID); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -73,5 +76,5 @@ func (c *Cleaner) deleteMail(ctx context.Context, tx *storage.Tx, mail *storage.
 	mail.DeletedAt.Int64 = time.Now().Unix()
 	mail.DeletedAt.Valid = true
 
-	return queries.UpdateMail(tx, mail)
+	return c.mailDao.Update(ctx, tx, mail)
 }

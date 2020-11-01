@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package storage
+package database
 
 import (
 	"context"
@@ -32,11 +32,6 @@ import (
 
 const driverName = "sqlite3"
 
-// Database is a connection to the sql database.
-type Database struct {
-	conn *sqlx.DB
-}
-
 func init() {
 	migrate.SetTable("migrations")
 
@@ -44,11 +39,55 @@ func init() {
 	viper.SetDefault("storage.database.journalmode", "wal")
 }
 
-// OpenDatabase opens a sqlite3 database using the configuration from viper.
-//
-// `storage.database.filename` is the filename for the sqlite database.
-// `storage.database.journalmode` will be used for the journalmode pragma.
-func OpenDatabase() (*Database, error) {
+// Queryer is an interface for both transactions and the database connection itself.
+type Queryer interface {
+	sqlx.ExtContext
+}
+
+// Tx is a database transaction, which can be rolled back or committed.
+type Tx interface {
+	Queryer
+	Commit() error
+	Rollback() error
+	RollbackWith(func()) error
+}
+
+type tx struct {
+	*sqlx.Tx
+}
+
+func (t tx) RollbackWith(callback func()) error {
+	err := t.Rollback()
+
+	if !errors.Is(err, sql.ErrTxDone) {
+		callback()
+	}
+
+	return err
+}
+
+// Conn is a connection to the sql database.
+type Conn interface {
+	Queryer
+	Begin(context.Context) (Tx, error)
+	Close() error
+}
+
+type conn struct {
+	*sqlx.DB
+}
+
+func (c conn) Begin(ctx context.Context) (Tx, error) {
+	rawTx, err := c.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx{rawTx}, nil
+}
+
+// OpenConnection opens an sqlite3 database connection using the configuration from viper.
+func OpenConnection() (Conn, error) {
 	sqliteVersion, _, _ := sqlite3.Version()
 
 	dsn := createDataSourceName()
@@ -79,7 +118,7 @@ func OpenDatabase() (*Database, error) {
 			Msg("database migrations applied")
 	}
 
-	return &Database{db}, nil
+	return conn{db}, nil
 }
 
 func createDataSourceName() string {
@@ -107,64 +146,4 @@ func loadMigrations() (migrate.MigrationSource, error) {
 	}
 
 	return &source, nil
-}
-
-// BeginTx starts a new database transaction. Every call to Exec, Query, Get or Select uses passes
-// the context provided to this method.
-func (d *Database) BeginTx(ctx context.Context) (*Tx, error) {
-	raw, err := d.conn.BeginTxx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Tx{raw, ctx}, nil
-}
-
-// Tx is a database transaction. Unlike the standard *sql.Tx, this one also wraps the context used
-// in to begin the transaction.
-type Tx struct {
-	raw *sqlx.Tx
-	ctx context.Context
-}
-
-// Rollback rolls back the transaction.
-func (t *Tx) Rollback() error {
-	return t.raw.Rollback()
-}
-
-// RollbackWith calls Rollback and, unless the transaction was already committed, calls the
-// callback function.
-func (t *Tx) RollbackWith(callback func()) error {
-	err := t.Rollback()
-
-	if !errors.Is(err, sql.ErrTxDone) {
-		callback()
-	}
-
-	return err
-}
-
-// Commit commits the transaction.
-func (t *Tx) Commit() error {
-	return t.raw.Commit()
-}
-
-// Exec executes a query that does not return rows.
-func (t *Tx) Exec(query string, args ...interface{}) (sql.Result, error) {
-	return t.raw.ExecContext(t.ctx, query, args...)
-}
-
-// NamedExec executes a query and maps the query parameters by name.
-func (t *Tx) NamedExec(query string, args interface{}) (sql.Result, error) {
-	return t.raw.NamedExecContext(t.ctx, query, args)
-}
-
-// Get executes a query returning a single row.
-func (t *Tx) Get(dest interface{}, query string, args ...interface{}) error {
-	return t.raw.GetContext(t.ctx, dest, query, args...)
-}
-
-// Select executes a query returning multiple rows.
-func (t *Tx) Select(dest interface{}, query string, args ...interface{}) error {
-	return t.raw.SelectContext(t.ctx, dest, query, args...)
 }

@@ -23,13 +23,13 @@ import (
 	"github.com/zaccone/spf"
 
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/mails"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 func makeSpfHook() FromHook {
 	log.Info().Msg("registering spf hook")
 
-	return func(ctx context.Context, submission bool, ip net.IP, from mails.Address) (*Result, error) {
+	return func(ctx context.Context, submission bool, ip net.IP, from models.Address) (*Result, error) {
 		if submission {
 			return &Result{}, nil
 		}

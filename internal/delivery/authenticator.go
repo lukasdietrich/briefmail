@@ -23,10 +23,9 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/internal/crypto"
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/mails"
-	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 var (
@@ -41,15 +40,23 @@ func init() {
 
 // Authenticator is for authentication of users based on their addresses.
 type Authenticator struct {
-	database *storage.Database
+	database             database.Conn
+	mailboxDao           database.MailboxDao
+	mailboxCredentialDao database.MailboxCredentialDao
 
 	minDuration time.Duration
 }
 
 // NewAuthenticator creates a new Authenticator.
-func NewAuthenticator(database *storage.Database) *Authenticator {
+func NewAuthenticator(
+	db database.Conn,
+	mailboxDao database.MailboxDao,
+	mailboxCredentialDao database.MailboxCredentialDao,
+) *Authenticator {
 	return &Authenticator{
-		database: database,
+		database:             db,
+		mailboxDao:           mailboxDao,
+		mailboxCredentialDao: mailboxCredentialDao,
 
 		minDuration: viper.GetDuration("security.auth.minDuration"),
 	}
@@ -58,7 +65,7 @@ func NewAuthenticator(database *storage.Database) *Authenticator {
 // Auth searches for a mailbox by address. If the address does not exist, is not local or the
 // password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
 // may occur.
-func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*storage.Mailbox, error) {
+func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*models.MailboxEntity, error) {
 	startTime := time.Now()
 	defer a.ensureMinDuration(startTime)
 
@@ -100,43 +107,32 @@ func (a *Authenticator) ensureMinDuration(start time.Time) {
 }
 
 type mailboxWithCredentials struct {
-	mailbox     *storage.Mailbox
-	credentials *storage.MailboxCredentials
+	mailbox     *models.MailboxEntity
+	credentials *models.MailboxCredentialEntity
 }
 
 func (a *Authenticator) lookup(ctx context.Context, name []byte) (*mailboxWithCredentials, error) {
-	addr, err := mails.ParseNormalized(string(name))
+	addr, err := models.ParseNormalized(string(name))
 	if err != nil {
 		return nil, err
 	}
 
-	tx, err := a.database.BeginTx(ctx)
+	mailbox, err := a.mailboxDao.FindByAddress(ctx, a.database, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	defer tx.Rollback()
-
-	mailbox, err := queries.FindMailboxByAddress(tx, addr.LocalPart(), addr.Domain())
+	credentials, err := a.mailboxCredentialDao.FindByMailbox(ctx, a.database, mailbox)
 	if err != nil {
 		return nil, err
 	}
 
-	credentials, err := queries.FindMailboxCredentials(tx, mailbox)
-	if err != nil {
-		return nil, err
-	}
+	return &mailboxWithCredentials{mailbox, credentials}, nil
 
-	result := mailboxWithCredentials{
-		mailbox:     mailbox,
-		credentials: credentials,
-	}
-
-	return &result, tx.Commit()
 }
 
 func isErrUnknownAddress(err error) bool {
-	return storage.IsErrNoRows(err) ||
-		errors.Is(err, mails.ErrInvalidAddressFormat) ||
-		errors.Is(err, mails.ErrPathTooLong)
+	return database.IsErrNoRows(err) ||
+		errors.Is(err, models.ErrInvalidAddressFormat) ||
+		errors.Is(err, models.ErrPathTooLong)
 }

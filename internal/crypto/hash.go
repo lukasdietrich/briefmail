@@ -19,7 +19,7 @@ import (
 	"github.com/lukasdietrich/argon2go"
 	"github.com/spf13/viper"
 
-	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 // ErrPasswordMismatch is returned when a password does not match the hash.
@@ -35,7 +35,7 @@ func init() {
 
 // Hash applies the argon2id hashing algorithm to a password and stores the hash in the credentials.
 // The options used for hashing are determined using viper.
-func Hash(creds *storage.MailboxCredentials, pass []byte) (err error) {
+func Hash(creds *models.MailboxCredentialEntity, pass []byte) (err error) {
 	opts := argon2go.Options{
 		Time:       viper.GetUint32("crypto.argon2.time"),
 		Memory:     viper.GetUint32("crypto.argon2.memory"),
@@ -50,6 +50,6 @@ func Hash(creds *storage.MailboxCredentials, pass []byte) (err error) {
 
 // Verify checks if a password matches the credentials hash. If the password does not match
 // ErrPasswordMismatch is returned. There may occur other, technical errors.
-func Verify(creds *storage.MailboxCredentials, pass []byte) error {
+func Verify(creds *models.MailboxCredentialEntity, pass []byte) error {
 	return argon2go.Verify(pass, creds.Hash)
 }

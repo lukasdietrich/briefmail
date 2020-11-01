@@ -25,19 +25,33 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/ktr0731/go-fuzzyfinder"
 
-	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/database"
 )
 
 // Shell is an interactive shell to manage briefmail domains, mailboxes and addresses.
 type Shell struct {
-	database *storage.Database
-	commands cmdSlice
+	database             database.Conn
+	mailboxDao           database.MailboxDao
+	mailboxCredentialDao database.MailboxCredentialDao
+	domainDao            database.DomainDao
+	addressDao           database.AddressDao
+	commands             cmdSlice
 }
 
 // NewShell creates a new shell instance.
-func NewShell(database *storage.Database) *Shell {
+func NewShell(
+	db database.Conn,
+	mailboxDao database.MailboxDao,
+	mailboxCredentialDao database.MailboxCredentialDao,
+	domainDao database.DomainDao,
+	addressDao database.AddressDao,
+) *Shell {
 	return &Shell{
-		database: database,
+		database:             db,
+		mailboxDao:           mailboxDao,
+		mailboxCredentialDao: mailboxCredentialDao,
+		domainDao:            domainDao,
+		addressDao:           addressDao,
 		commands: cmdSlice{
 			{
 				name: "domain",
@@ -189,9 +203,13 @@ type cmdDef struct {
 
 type cmdContext struct {
 	context.Context
-	rl        *readline.Instance
-	tx        *storage.Tx
-	infoLines []string
+	rl                   *readline.Instance
+	tx                   database.Tx
+	mailboxDao           database.MailboxDao
+	mailboxCredentialDao database.MailboxCredentialDao
+	domainDao            database.DomainDao
+	addressDao           database.AddressDao
+	infoLines            []string
 }
 
 func (c *cmdContext) info(format string, v ...interface{}) {
@@ -247,15 +265,19 @@ func (s *Shell) handleCommand(rl *readline.Instance, args []string) error {
 func (s *Shell) executeCommand(rl *readline.Instance, cmd cmdDef) error {
 	ctx := context.Background()
 
-	tx, err := s.database.BeginTx(ctx)
+	tx, err := s.database.Begin(ctx)
 	if err != nil {
 		return err
 	}
 
 	cmdCtx := cmdContext{
-		Context: context.Background(),
-		rl:      rl,
-		tx:      tx,
+		Context:              context.Background(),
+		rl:                   rl,
+		tx:                   tx,
+		mailboxDao:           s.mailboxDao,
+		mailboxCredentialDao: s.mailboxCredentialDao,
+		domainDao:            s.domainDao,
+		addressDao:           s.addressDao,
 	}
 
 	if err := cmd.action(&cmdCtx); err != nil {

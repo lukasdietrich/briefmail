@@ -27,7 +27,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/mails"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
@@ -87,7 +87,7 @@ func (p *Proto) Handle(c textproto.Conn) {
 	s := &session{
 		Conn:  c,
 		state: sInit,
-		envelope: mails.Envelope{
+		envelope: delivery.Envelope{
 			Addr: c.RemoteAddr(),
 		},
 	}
@@ -161,10 +161,10 @@ func handleError(s *session, err error) error {
 	case errors.Is(err, errCommandSyntax):
 		return s.reply(501, "syntax error in parameters or arguments")
 
-	case errors.Is(err, mails.ErrInvalidAddressFormat):
+	case errors.Is(err, models.ErrInvalidAddressFormat):
 		return s.reply(553, "invalid address format")
 
-	case errors.Is(err, mails.ErrPathTooLong):
+	case errors.Is(err, models.ErrPathTooLong):
 		return s.reply(501, "path too long")
 	}
 

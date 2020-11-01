@@ -20,9 +20,8 @@ import (
 	"io"
 	"net"
 
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/spf13/viper"
-
-	"github.com/lukasdietrich/briefmail/internal/mails"
 )
 
 func init() {
@@ -51,7 +50,7 @@ type Result struct {
 }
 
 // FromHook is a hook called during `MAIL`.
-type FromHook func(context.Context, bool, net.IP, mails.Address) (*Result, error)
+type FromHook func(context.Context, bool, net.IP, models.Address) (*Result, error)
 
 // DataHook is a hook called during `DATA`.
 type DataHook func(context.Context, bool, io.Reader) (*Result, error)

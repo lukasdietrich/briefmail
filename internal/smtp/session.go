@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lukasdietrich/briefmail/internal/mails"
+	"github.com/lukasdietrich/briefmail/internal/delivery"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
-	"github.com/lukasdietrich/briefmail/internal/storage"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
@@ -57,9 +57,9 @@ type session struct {
 	textproto.Conn
 
 	state    sessionState
-	envelope mails.Envelope
+	envelope delivery.Envelope
 	headers  []hook.HeaderField
-	mailbox  *storage.Mailbox
+	mailbox  *models.MailboxEntity
 }
 
 func (s *session) isSubmission() bool {

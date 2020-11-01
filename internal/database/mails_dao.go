@@ -13,14 +13,38 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package queries
+package database
 
 import (
-	"github.com/lukasdietrich/briefmail/internal/storage"
+	"context"
+
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
-// InsertMail inserts a new mail.
-func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
+// MailDao is a data access object for all mail related queries.
+type MailDao interface {
+	// Insert inserts a new mail.
+	Insert(context.Context, Queryer, *models.MailEntity) error
+	// Update updates an existing mail.
+	Update(context.Context, Queryer, *models.MailEntity) error
+	// FindByMailbox returns all mails that are not deleted and are "inboxed" to the mailbox.
+	FindByMailbox(context.Context, Queryer, *models.MailboxEntity) ([]models.MailEntity, error)
+	// FindDeletable returns all mails which are not yet deleted and are delivered or failed to all
+	// recipients.
+	FindDeletable(context.Context, Queryer) ([]models.MailEntity, error)
+	// FindNextPending returns the next mail with at least one pending recipient.
+	FindNextPending(context.Context, Queryer) (*models.MailEntity, error)
+}
+
+// mailDao is the sqlite implementation of MailDao.
+type mailDao struct{}
+
+// NewMailDao creates a new MailDao.
+func NewMailDao() MailDao {
+	return mailDao{}
+}
+
+func (mailDao) Insert(ctx context.Context, q Queryer, mail *models.MailEntity) error {
 	const query = `
 		insert into "mails" (
 			"id" ,
@@ -41,12 +65,15 @@ func InsertMail(tx *storage.Tx, mail *storage.Mail) error {
 		) ;
 	`
 
-	_, err := tx.NamedExec(query, mail)
-	return err
+	result, err := execNamed(ctx, q, query, mail)
+	if err != nil {
+		return err
+	}
+
+	return ensureRowsAffected(result)
 }
 
-// UpdateMail updates an existing mail.
-func UpdateMail(tx *storage.Tx, mail *storage.Mail) error {
+func (mailDao) Update(ctx context.Context, q Queryer, mail *models.MailEntity) error {
 	const query = `
 		update "mails"
 		set "received_at"       = :received_at ,
@@ -58,12 +85,19 @@ func UpdateMail(tx *storage.Tx, mail *storage.Mail) error {
 		where "id" = :id ;
 	`
 
-	_, err := tx.NamedExec(query, mail)
-	return err
+	result, err := execNamed(ctx, q, query, mail)
+	if err != nil {
+		return err
+	}
+
+	return ensureRowsAffected(result)
 }
 
-// FindMailsByMailbox returns all mails that are not deleted and are "inboxed" to the mailbox.
-func FindMailsByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]storage.Mail, error) {
+func (mailDao) FindByMailbox(
+	ctx context.Context,
+	q Queryer,
+	mailbox *models.MailboxEntity,
+) ([]models.MailEntity, error) {
 	const query = `
 		select distinct "mails".*
 		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
@@ -73,13 +107,16 @@ func FindMailsByMailbox(tx *storage.Tx, mailbox *storage.Mailbox) ([]storage.Mai
 		order by "mails"."received_at" asc ;
 	`
 
-	var mailSlice []storage.Mail
-	return mailSlice, tx.Select(&mailSlice, query, mailbox.ID, storage.StatusInboxed)
+	var mailSlice []models.MailEntity
+
+	if err := selectSlice(ctx, q, &mailSlice, query, mailbox.ID, models.StatusInboxed); err != nil {
+		return nil, err
+	}
+
+	return mailSlice, nil
 }
 
-// FindDeletableMails returns all mails which are not yet deleted and are delivered or failed to all
-// recipients.
-func FindDeletableMails(tx *storage.Tx) ([]storage.Mail, error) {
+func (mailDao) FindDeletable(ctx context.Context, q Queryer) ([]models.MailEntity, error) {
 	const query = `
 		select "mails".*
 		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
@@ -89,12 +126,20 @@ func FindDeletableMails(tx *storage.Tx) ([]storage.Mail, error) {
 		order by "mails"."received_at" asc ;
 	`
 
-	var mailSlice []storage.Mail
-	return mailSlice, tx.Select(&mailSlice, query, storage.StatusDelivered, storage.StatusFailed)
+	var mailSlice []models.MailEntity
+
+	err := selectSlice(ctx, q, &mailSlice, query,
+		models.StatusDelivered,
+		models.StatusFailed)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return mailSlice, nil
 }
 
-// FindNextPendingMail returns the next mail with at least one pending recipient.
-func FindNextPendingMail(tx *storage.Tx) (*storage.Mail, error) {
+func (mailDao) FindNextPending(ctx context.Context, q Queryer) (*models.MailEntity, error) {
 	const query = `
 		select "mails".*
 		from "mails" inner join "recipients" on "mails"."id" = "recipients"."mail_id"
@@ -106,8 +151,9 @@ func FindNextPendingMail(tx *storage.Tx) (*storage.Mail, error) {
 		limit 1 ;
 	`
 
-	var mail storage.Mail
-	if err := tx.Get(&mail, query, storage.StatusPending); err != nil {
+	var mail models.MailEntity
+
+	if err := selectOne(ctx, q, &mail, query, models.StatusPending); err != nil {
 		return nil, err
 	}
 

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package mails
+package models
 
 import (
 	"database/sql/driver"
@@ -101,6 +101,17 @@ func Parse(raw string) (Address, error) {
 // String returns the raw address provided to ParseAddress.
 func (a Address) String() string {
 	return a.raw
+}
+
+// Normalized returns a copy of a with a normalized local-part.
+func (a Address) Normalized() Address {
+	localPart := a.LocalPart()
+	localPart = NormalizeLocalPart(localPart)
+
+	return Address{
+		raw: localPart + "@" + a.Domain(),
+		at:  len(localPart),
+	}
 }
 
 // LocalPart returns the part left of the "@" sign (exclusive).

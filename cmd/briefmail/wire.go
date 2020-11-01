@@ -21,6 +21,7 @@ import (
 	"github.com/google/wire"
 
 	"github.com/lukasdietrich/briefmail/internal/certs"
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/pop3"
 	"github.com/lukasdietrich/briefmail/internal/shell"
@@ -35,7 +36,13 @@ func newStartCommand() (*startCommand, error) {
 
 		certs.NewTLSConfig,
 
-		storage.OpenDatabase,
+		database.OpenConnection,
+		database.NewMailboxDao,
+		database.NewMailboxCredentialDao,
+		database.NewDomainDao,
+		database.NewMailDao,
+		database.NewRecipientDao,
+
 		storage.NewBlobs,
 		storage.NewCache,
 
@@ -59,7 +66,12 @@ func newShellCommand() (*shellCommand, error) {
 	panic(wire.Build(
 		wire.Struct(new(shellCommand), "*"),
 
-		storage.OpenDatabase,
+		database.OpenConnection,
+		database.NewMailboxDao,
+		database.NewMailboxCredentialDao,
+		database.NewDomainDao,
+		database.NewAddressDao,
+
 		shell.NewShell,
 	))
 }

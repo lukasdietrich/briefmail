@@ -23,9 +23,8 @@ import (
 	"github.com/ktr0731/go-fuzzyfinder"
 
 	"github.com/lukasdietrich/briefmail/internal/crypto"
-	"github.com/lukasdietrich/briefmail/internal/mails"
-	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+	"github.com/lukasdietrich/briefmail/internal/database"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 var (
@@ -40,16 +39,16 @@ func addDomain(ctx *cmdContext) error {
 		return err
 	}
 
-	domainName, err = mails.DomainToUnicode(domainName)
+	domainName, err = models.DomainToUnicode(domainName)
 	if err != nil {
 		return fmt.Errorf("could not normalize domain %q: %w", domainName, err)
 	}
 
-	domain := storage.Domain{
+	domain := models.DomainEntity{
 		Name: domainName,
 	}
 
-	if err := queries.InsertDomain(ctx.tx, &domain); err != nil {
+	if err := ctx.domainDao.Insert(ctx, ctx.tx, &domain); err != nil {
 		return fmt.Errorf("could not store new domain %q: %w", domainName, err)
 	}
 
@@ -63,7 +62,7 @@ func deleteDomain(ctx *cmdContext) error {
 		return err
 	}
 
-	if err := queries.DeleteDomain(ctx.tx, domain); err != nil {
+	if err := ctx.domainDao.Delete(ctx, ctx.tx, domain); err != nil {
 		return fmt.Errorf("could not delete domain %q: %w", domain.Name, err)
 	}
 
@@ -82,7 +81,7 @@ func replaceDomain(ctx *cmdContext) error {
 		return err
 	}
 
-	newName, err = mails.DomainToUnicode(newName)
+	newName, err = models.DomainToUnicode(newName)
 	if err != nil {
 		return fmt.Errorf("could not normalize domain %q: %w", newName, err)
 	}
@@ -90,7 +89,7 @@ func replaceDomain(ctx *cmdContext) error {
 	oldName := domain.Name
 	domain.Name = newName
 
-	if err := queries.UpdateDomain(ctx.tx, domain); err != nil {
+	if err := ctx.domainDao.Update(ctx, ctx.tx, domain); err != nil {
 		return fmt.Errorf("could not replace domain %q with %q: %w", oldName, newName, err)
 	}
 
@@ -104,7 +103,7 @@ func infoMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	addresses, err := queries.FindAddressesByMailbox(ctx.tx, mailbox)
+	addresses, err := ctx.addressDao.FindByMailbox(ctx, ctx.tx, mailbox)
 	if err != nil {
 		return err
 	}
@@ -127,7 +126,7 @@ func addMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	mailbox := storage.Mailbox{
+	mailbox := models.MailboxEntity{
 		DisplayName: displayName,
 	}
 
@@ -136,11 +135,11 @@ func addMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	if err := queries.InsertMailbox(ctx.tx, &mailbox); err != nil {
+	if err := ctx.mailboxDao.Insert(ctx, ctx.tx, &mailbox); err != nil {
 		return err
 	}
 
-	credentials := storage.MailboxCredentials{
+	credentials := models.MailboxCredentialEntity{
 		MailboxID: mailbox.ID,
 		UpdatedAt: time.Now().Unix(),
 	}
@@ -149,7 +148,7 @@ func addMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	if err := queries.UpsertMailboxCredentials(ctx.tx, &credentials); err != nil {
+	if err := ctx.mailboxCredentialDao.Upsert(ctx, ctx.tx, &credentials); err != nil {
 		return err
 	}
 
@@ -163,7 +162,7 @@ func deleteMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	if err := queries.DeleteMailbox(ctx.tx, mailbox); err != nil {
+	if err := ctx.mailboxDao.Delete(ctx, ctx.tx, mailbox); err != nil {
 		return fmt.Errorf("could not delete mailbox %q: %w", mailbox.DisplayName, err)
 	}
 
@@ -182,7 +181,7 @@ func passwdMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	credentials := storage.MailboxCredentials{
+	credentials := models.MailboxCredentialEntity{
 		MailboxID: mailbox.ID,
 		UpdatedAt: time.Now().Unix(),
 	}
@@ -191,7 +190,7 @@ func passwdMailbox(ctx *cmdContext) error {
 		return err
 	}
 
-	if err := queries.UpsertMailboxCredentials(ctx.tx, &credentials); err != nil {
+	if err := ctx.mailboxCredentialDao.Upsert(ctx, ctx.tx, &credentials); err != nil {
 		return err
 	}
 
@@ -205,7 +204,7 @@ func addAddress(ctx *cmdContext) error {
 		return err
 	}
 
-	localPart = mails.NormalizeLocalPart(localPart)
+	localPart = models.NormalizeLocalPart(localPart)
 
 	domains, err := selectMultipleDomain(ctx)
 	if err != nil {
@@ -218,13 +217,13 @@ func addAddress(ctx *cmdContext) error {
 	}
 
 	for _, domain := range domains {
-		address := storage.Address{
+		address := models.AddressEntity{
 			LocalPart: localPart,
 			DomainID:  domain.ID,
 			MailboxID: mailbox.ID,
 		}
 
-		if err := queries.InsertAddress(ctx.tx, &address); err != nil {
+		if err := ctx.addressDao.Insert(ctx, ctx.tx, &address); err != nil {
 			return fmt.Errorf("could not store new address \"%s@%s\": %w",
 				address.LocalPart, domain.Name, err)
 		}
@@ -246,7 +245,7 @@ func deleteAddress(ctx *cmdContext) error {
 	}
 
 	for _, address := range addresses {
-		if err := queries.DeleteAddress(ctx.tx, &address.Address); err != nil {
+		if err := ctx.addressDao.Delete(ctx, ctx.tx, &address.AddressEntity); err != nil {
 			return fmt.Errorf("could not delete address \"%s@%s\": %w",
 				address.LocalPart, address.DomainName, err)
 		}
@@ -256,8 +255,8 @@ func deleteAddress(ctx *cmdContext) error {
 	return nil
 }
 
-func selectOneDomain(ctx *cmdContext) (*storage.Domain, error) {
-	domains, err := queries.FindDomains(ctx.tx)
+func selectOneDomain(ctx *cmdContext) (*models.DomainEntity, error) {
+	domains, err := ctx.domainDao.FindAll(ctx, ctx.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -274,8 +273,8 @@ func selectOneDomain(ctx *cmdContext) (*storage.Domain, error) {
 	return &domains[index], nil
 }
 
-func selectMultipleDomain(ctx *cmdContext) ([]storage.Domain, error) {
-	domains, err := queries.FindDomains(ctx.tx)
+func selectMultipleDomain(ctx *cmdContext) ([]models.DomainEntity, error) {
+	domains, err := ctx.domainDao.FindAll(ctx, ctx.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +288,7 @@ func selectMultipleDomain(ctx *cmdContext) ([]storage.Domain, error) {
 		return nil, err
 	}
 
-	selectedDomains := make([]storage.Domain, len(indices))
+	selectedDomains := make([]models.DomainEntity, len(indices))
 	for i, index := range indices {
 		selectedDomains[i] = domains[index]
 	}
@@ -297,8 +296,8 @@ func selectMultipleDomain(ctx *cmdContext) ([]storage.Domain, error) {
 	return selectedDomains, nil
 }
 
-func selectOneMailbox(ctx *cmdContext) (*storage.Mailbox, error) {
-	mailboxes, err := queries.FindMailboxes(ctx.tx)
+func selectOneMailbox(ctx *cmdContext) (*models.MailboxEntity, error) {
+	mailboxes, err := ctx.mailboxDao.FindAll(ctx, ctx.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -315,8 +314,8 @@ func selectOneMailbox(ctx *cmdContext) (*storage.Mailbox, error) {
 	return &mailboxes[index], nil
 }
 
-func selectMultipleAddresses(ctx *cmdContext) ([]queries.AddressWithDomain, error) {
-	addresses, err := queries.FindAddresses(ctx.tx)
+func selectMultipleAddresses(ctx *cmdContext) ([]database.AddressWithDomain, error) {
+	addresses, err := ctx.addressDao.FindAll(ctx, ctx.tx)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +329,7 @@ func selectMultipleAddresses(ctx *cmdContext) ([]queries.AddressWithDomain, erro
 		return nil, err
 	}
 
-	selectedAddresses := make([]queries.AddressWithDomain, len(indices))
+	selectedAddresses := make([]database.AddressWithDomain, len(indices))
 	for i, index := range indices {
 		selectedAddresses[i] = addresses[index]
 	}
@@ -338,19 +337,19 @@ func selectMultipleAddresses(ctx *cmdContext) ([]queries.AddressWithDomain, erro
 	return selectedAddresses, nil
 }
 
-func mapDomainSearch(domains []storage.Domain) func(int) string {
+func mapDomainSearch(domains []models.DomainEntity) func(int) string {
 	return func(i int) string {
 		return domains[i].Name
 	}
 }
 
-func mapMailboxSearch(mailboxes []storage.Mailbox) func(int) string {
+func mapMailboxSearch(mailboxes []models.MailboxEntity) func(int) string {
 	return func(i int) string {
 		return mailboxes[i].DisplayName
 	}
 }
 
-func mapAddressSearch(addresses []queries.AddressWithDomain) func(int) string {
+func mapAddressSearch(addresses []database.AddressWithDomain) func(int) string {
 	return func(i int) string {
 		address := addresses[i]
 		return address.LocalPart + "@" + address.DomainName

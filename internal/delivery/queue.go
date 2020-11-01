@@ -24,9 +24,9 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 var (
@@ -40,7 +40,8 @@ func init() {
 
 // Queue coordinates the delivery attempts of outbound mails.
 type Queue struct {
-	database *storage.Database
+	database database.Conn
+	mailDao  database.MailDao
 	courier  *Courier
 	cleaner  *Cleaner
 
@@ -53,7 +54,12 @@ type Queue struct {
 }
 
 // NewQueue creates a new Queue.
-func NewQueue(database *storage.Database, courier *Courier, cleaner *Cleaner) (*Queue, error) {
+func NewQueue(
+	db database.Conn,
+	mailDao database.MailDao,
+	courier *Courier,
+	cleaner *Cleaner,
+) (*Queue, error) {
 	var (
 		delays      = viper.GetStringSlice("mail.queue.delays")
 		giveUpAfter = viper.GetDuration("mail.queue.giveUpAfter")
@@ -85,7 +91,8 @@ func NewQueue(database *storage.Database, courier *Courier, cleaner *Cleaner) (*
 	}
 
 	queue := Queue{
-		database: database,
+		database: db,
+		mailDao:  mailDao,
 		courier:  courier,
 		cleaner:  cleaner,
 
@@ -124,17 +131,10 @@ func (q *Queue) WakeUp(ctx context.Context) {
 
 // schedule finds the next pending mail. If any is present, an attempt is scheduled.
 func (q *Queue) schedule(ctx context.Context) error {
-	tx, err := q.database.BeginTx(ctx)
-	if err != nil {
-		return err
-	}
-
-	defer tx.Rollback()
-
-	mail, err := queries.FindNextPendingMail(tx)
+	mail, err := q.mailDao.FindNextPending(ctx, q.database)
 	if err != nil {
 		// if no pending mail exists, do not schedule an attempt.
-		if storage.IsErrNoRows(err) {
+		if database.IsErrNoRows(err) {
 			log.DebugContext(ctx).Msg("no mail is pending")
 			return nil
 		}
@@ -159,13 +159,12 @@ func (q *Queue) schedule(ctx context.Context) error {
 	// execute attemptMail using the timer, even if waitDuration is 0, because we are currently
 	// holding a lock. If we call it directly, we have a deadlock.
 	q.timer = time.AfterFunc(waitDuration, q.attemptDelivery(mail))
-
-	return tx.Commit()
+	return nil
 }
 
 // determineNextAttemptTime calculates the time for the next delivery attempt of a mail. The next
 // attempt is at `LastAttemptTime + delay(attempt)`. The first attempt has no delay.
-func (q *Queue) determineNextAttemptTime(mail *storage.Mail) time.Time {
+func (q *Queue) determineNextAttemptTime(mail *models.MailEntity) time.Time {
 	scheduleTime := mail.ReceivedAt
 
 	if mail.LastAttemptedAt.Valid {
@@ -181,7 +180,7 @@ func (q *Queue) determineNextAttemptTime(mail *storage.Mail) time.Time {
 	return time.Unix(scheduleTime, 0)
 }
 
-func (q *Queue) attemptDelivery(mail *storage.Mail) func() {
+func (q *Queue) attemptDelivery(mail *models.MailEntity) func() {
 	ctx := context.TODO()
 	ctx = log.WithOrigin(ctx, "queue")
 
@@ -208,7 +207,11 @@ func (q *Queue) attemptDelivery(mail *storage.Mail) func() {
 	}
 }
 
-func (q *Queue) handleDeliveryResult(ctx context.Context, mail *storage.Mail, result SendResult) {
+func (q *Queue) handleDeliveryResult(
+	ctx context.Context,
+	mail *models.MailEntity,
+	result SendResult,
+) {
 	var (
 		hasPending = result.check(SomePending)
 		hasFailed  = result.check(SomeFailed)

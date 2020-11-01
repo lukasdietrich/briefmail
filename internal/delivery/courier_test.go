@@ -21,8 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/lukasdietrich/briefmail/internal/mails"
-	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 func TestRecipientGroupByDomainEmpty(t *testing.T) {
@@ -72,11 +71,11 @@ func TestRecipientGroupByDomainMany(t *testing.T) {
 	assert.Equal(t, expected, actual)
 }
 
-func fakeRecipient(t *testing.T, forwardPath string) storage.Recipient {
-	address, err := mails.Parse(forwardPath)
+func fakeRecipient(t *testing.T, forwardPath string) models.RecipientEntity {
+	address, err := models.Parse(forwardPath)
 	require.NoError(t, err)
 
-	return storage.Recipient{
+	return models.RecipientEntity{
 		ForwardPath: address,
 	}
 }

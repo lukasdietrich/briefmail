@@ -25,12 +25,22 @@ import (
 // Logger is the global zerolog.Logger instance.
 var Logger = zerolog.New(os.Stderr).With().Timestamp().Caller().Logger()
 
+// Trace starts a new log event with trace level.
+func Trace() *zerolog.Event {
+	return Logger.Trace()
+}
+
+// TraceContext starts a new log event with trace level and appends fields defined in the context.
+func TraceContext(ctx context.Context) *zerolog.Event {
+	return appendContextFields(ctx, Trace())
+}
+
 // Debug starts a new log event with debug level.
 func Debug() *zerolog.Event {
 	return Logger.Debug()
 }
 
-// DebugContext starts a new log event with debug level and appends fields defined in the context.
+// DebugContext starts a new log event with debug level
 func DebugContext(ctx context.Context) *zerolog.Event {
 	return appendContextFields(ctx, Debug())
 }

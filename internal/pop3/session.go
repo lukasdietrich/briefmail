@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
-	"github.com/lukasdietrich/briefmail/internal/storage"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/textproto"
 )
 
@@ -55,7 +55,7 @@ type session struct {
 	state sessionState
 	name  []byte
 
-	mailbox *storage.Mailbox
+	mailbox *models.MailboxEntity
 	inbox   *delivery.Inbox
 }
 

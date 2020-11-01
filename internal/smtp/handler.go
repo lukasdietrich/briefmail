@@ -30,7 +30,7 @@ import (
 
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/mails"
+	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/lukasdietrich/briefmail/internal/smtp/hook"
 	"github.com/lukasdietrich/briefmail/internal/storage"
 )
@@ -124,7 +124,7 @@ func rset() handler {
 			s.state = sHelo
 		}
 
-		s.envelope.From = mails.ZeroAddress
+		s.envelope.From = models.ZeroAddress
 		s.envelope.To = nil
 		s.headers = nil
 
@@ -167,7 +167,7 @@ func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHoo
 			return err
 		}
 
-		from, err := mails.ParseUnicode(arg)
+		from, err := models.ParseUnicode(arg)
 		if err != nil {
 			return err
 		}
@@ -208,16 +208,19 @@ func checkOrigin(ctx context.Context, s *session, origin *delivery.LookupResult)
 		if !origin.IsLocal || origin.Mailbox.ID != s.mailbox.ID {
 			log.WarnContext(ctx).
 				Int64("mailbox", s.mailbox.ID).
+				Stringer("from", origin.Address).
 				Msg("authenticated connection trying to send as someone else")
 
-			return smtpError{code: 550, text: "that does not sound like you."}
+			return smtpError{code: 550, text: "that does not sound like you"}
 		}
 	} else {
 		// unauthenticated connections must send mails from a remote address
 
 		if origin.IsLocal {
-			log.WarnContext(ctx).Msg("attempted submission without authentication")
-			return smtpError{code: 550, text: "submissions must be authenticated."}
+			log.WarnContext(ctx).
+				Stringer("from", origin.Address).
+				Msg("attempted submission without authentication")
+			return smtpError{code: 550, text: "submissions must be authenticated"}
 		}
 	}
 
@@ -252,7 +255,7 @@ func checkMaxSize(ctx context.Context, s *session, params map[string]string, max
 	return nil
 }
 
-func execFromHooks(ctx context.Context, s *session, from mails.Address, hooks []hook.FromHook) error {
+func execFromHooks(ctx context.Context, s *session, from models.Address, hooks []hook.FromHook) error {
 	var headers []hook.HeaderField
 
 	for _, hook := range hooks {
@@ -293,7 +296,7 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 			return s.reply(452, "that is quite a crowd already!")
 		}
 
-		to, err := mails.ParseUnicode(arg)
+		to, err := models.ParseUnicode(arg)
 		if err != nil {
 			return err
 		}
@@ -304,6 +307,10 @@ func rcpt(addressbook *delivery.Addressbook) handler {
 		}
 
 		if !isValidDestination(s, destination) {
+			log.DebugContext(ctx).
+				Stringer("to", to).
+				Msg("invalid recipient")
+
 			return s.reply(550, "never heard of that person.")
 		}
 

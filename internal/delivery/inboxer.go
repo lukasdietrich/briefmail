@@ -18,35 +18,30 @@ package delivery
 import (
 	"context"
 
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 // Inboxer is service to read a list of unread mails of a mailbox and committing changes later.
 type Inboxer struct {
-	database *storage.Database
-	cleaner  *Cleaner
+	database     database.Conn
+	mailDao      database.MailDao
+	recipientDao database.RecipientDao
+	cleaner      *Cleaner
 }
 
 // NewInboxer creates a new Inboxer.
-func NewInboxer(database *storage.Database, cleaner *Cleaner) *Inboxer {
+func NewInboxer(db database.Conn, cleaner *Cleaner) *Inboxer {
 	return &Inboxer{
-		database: database,
+		database: db,
 		cleaner:  cleaner,
 	}
 }
 
 // Inbox reads the a list of unread mails for a mailbox.
-func (i *Inboxer) Inbox(ctx context.Context, mailbox *storage.Mailbox) (*Inbox, error) {
-	tx, err := i.database.BeginTx(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	defer tx.Rollback()
-
-	mails, err := queries.FindMailsByMailbox(tx, mailbox)
+func (i *Inboxer) Inbox(ctx context.Context, mailbox *models.MailboxEntity) (*Inbox, error) {
+	mails, err := i.mailDao.FindByMailbox(ctx, i.database, mailbox)
 	if err != nil {
 		return nil, err
 	}
@@ -56,16 +51,12 @@ func (i *Inboxer) Inbox(ctx context.Context, mailbox *storage.Mailbox) (*Inbox, 
 		Int("mailCount", len(mails)).
 		Msg("inbox loaded")
 
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-
 	return newInbox(mails), nil
 }
 
 // Commit removes all marked mails of an inbox from the mailbox.
-func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *Inbox) error {
-	tx, err := i.database.BeginTx(ctx)
+func (i *Inboxer) Commit(ctx context.Context, mailbox *models.MailboxEntity, inbox *Inbox) error {
+	tx, err := i.database.Begin(ctx)
 	if err != nil {
 		return err
 	}
@@ -88,7 +79,7 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 				Str("mail", mail.ID).
 				Msg("deleting mail from mailbox")
 
-			if err := queries.UpdateRecipientsDelivered(tx, mailbox, &mail); err != nil {
+			if err := i.recipientDao.UpdateDelivered(ctx, tx, mailbox, &mail); err != nil {
 				return err
 			}
 
@@ -119,13 +110,13 @@ func (i *Inboxer) Commit(ctx context.Context, mailbox *storage.Mailbox, inbox *I
 // Inbox is a list of unreal mails as well as a set of "marks".
 // Marked mails are removed, when the inbox state is committed.
 type Inbox struct {
-	Mails      []storage.Mail
+	Mails      []models.MailEntity
 	marks      map[int]bool
 	size       int64
 	sizeMarked int64
 }
 
-func newInbox(mails []storage.Mail) *Inbox {
+func newInbox(mails []models.MailEntity) *Inbox {
 	var totalSize int64
 	for _, mail := range mails {
 		totalSize += mail.Size
@@ -168,10 +159,10 @@ func (i *Inbox) Count() int {
 }
 
 // Mail returns the mail if it exists and is not yet marked.
-func (i *Inbox) Mail(index int) (storage.Mail, bool) {
+func (i *Inbox) Mail(index int) (models.MailEntity, bool) {
 	if index >= 0 && index < len(i.Mails) && !i.IsMarked(index) {
 		return i.Mails[index], true
 	}
 
-	return storage.Mail{}, false
+	return models.MailEntity{}, false
 }

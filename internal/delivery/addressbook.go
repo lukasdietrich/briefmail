@@ -18,71 +18,84 @@ package delivery
 import (
 	"context"
 
-	"github.com/lukasdietrich/briefmail/internal/mails"
-	"github.com/lukasdietrich/briefmail/internal/storage"
-	"github.com/lukasdietrich/briefmail/internal/storage/queries"
+	"github.com/lukasdietrich/briefmail/internal/database"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 // Addressbook is a registry to lookup mail addresses.
 type Addressbook struct {
-	database *storage.Database
+	database   database.Conn
+	domainDao  database.DomainDao
+	mailboxDao database.MailboxDao
 }
 
 // NewAddressbook creates a new Addressbook.
-func NewAddressbook(database *storage.Database) *Addressbook {
+func NewAddressbook(
+	db database.Conn,
+	domainDao database.DomainDao,
+	mailboxDao database.MailboxDao,
+) *Addressbook {
 	return &Addressbook{
-		database: database,
+		database:   db,
+		domainDao:  domainDao,
+		mailboxDao: mailboxDao,
 	}
 }
 
 // LookupResult is the result of an address lookup.
 type LookupResult struct {
+	// Address is the address used for lookup.
+	Address models.Address
 	// IsLocal indicates if the domain part of the address is local. This does not imply that the
 	// address exists.
 	IsLocal bool
 	// Mailbox is the local mailbox of an address, if it is local and exists. If Mailbox is not nil
 	// IsLocal is implied to be true.
-	Mailbox *storage.Mailbox
+	Mailbox *models.MailboxEntity
 }
 
-// Lookup looks up an address in a new transaction. See LookupTx.
-func (a *Addressbook) Lookup(ctx context.Context, recipient mails.Address) (*LookupResult, error) {
-	tx, err := a.database.BeginTx(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	defer tx.Rollback()
-
-	result, err := a.LookupTx(tx, recipient)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, tx.Commit()
+// Lookup looks up an address without a transaction. See LookupTx.
+func (a *Addressbook) Lookup(ctx context.Context, recipient models.Address) (*LookupResult, error) {
+	return a.LookupTx(ctx, a.database, recipient)
 }
 
 // LookupTx looks up an address. The result indicates if the address belongs to a local domain and
 // if it does, if it exists. Only database errors may occur.
-func (a *Addressbook) LookupTx(tx *storage.Tx, recipient mails.Address) (*LookupResult, error) {
-	domain := recipient.Domain()
-
-	isLocal, err := queries.ExistsDomain(tx, domain)
+func (a *Addressbook) LookupTx(
+	ctx context.Context,
+	q database.Queryer,
+	recipient models.Address,
+) (*LookupResult, error) {
+	isLocal, err := a.checkLocal(ctx, q, recipient)
 	if err != nil {
 		return nil, err
 	}
 
 	if !isLocal {
-		return &LookupResult{IsLocal: false}, nil
+		return &LookupResult{Address: recipient, IsLocal: false}, nil
 	}
 
-	localPart := recipient.LocalPart()
-	localPart = mails.NormalizeLocalPart(localPart)
-
-	mailbox, err := queries.FindMailboxByAddress(tx, localPart, domain)
-	if err != nil && !storage.IsErrNoRows(err) {
+	mailbox, err := a.mailboxDao.FindByAddress(ctx, q, recipient.Normalized())
+	if err != nil && !database.IsErrNoRows(err) {
 		return nil, err
 	}
 
-	return &LookupResult{IsLocal: isLocal, Mailbox: mailbox}, nil
+	return &LookupResult{Address: recipient, IsLocal: isLocal, Mailbox: mailbox}, nil
+}
+
+func (a *Addressbook) checkLocal(
+	ctx context.Context,
+	q database.Queryer,
+	address models.Address,
+) (bool, error) {
+	_, err := a.domainDao.FindByName(ctx, q, address.Domain())
+	if err != nil {
+		if database.IsErrNoRows(err) {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return true, nil
 }

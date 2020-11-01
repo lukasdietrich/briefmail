@@ -24,7 +24,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/internal/log"
-	"github.com/lukasdietrich/briefmail/internal/mails"
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 func makeDnsblHook() FromHook {
@@ -33,7 +33,7 @@ func makeDnsblHook() FromHook {
 		Str("server", server).
 		Msg("registering dnsbl hook")
 
-	return func(ctx context.Context, submission bool, ip net.IP, _ mails.Address) (*Result, error) {
+	return func(ctx context.Context, submission bool, ip net.IP, _ models.Address) (*Result, error) {
 		if submission {
 			log.InfoContext(ctx).
 				Stringer("ip", ip).
