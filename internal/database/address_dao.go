@@ -50,13 +50,13 @@ func NewAddressDao() AddressDao {
 func (addressDao) Insert(ctx context.Context, q Queryer, address *models.AddressEntity) error {
 	const query = `
 		insert into "addresses" (
-			"local_part" ,
 			"domain_id" ,
-			"mailbox_id"
+			"mailbox_id" ,
+			"local_part"
 		) values (
-			:local_part ,
 			:domain_id ,
-			:mailbox_id
+			:mailbox_id ,
+			:local_part
 		) ;
 	`
 

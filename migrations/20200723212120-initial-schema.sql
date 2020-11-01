@@ -63,9 +63,9 @@ create unique index "idx_domains_unique_name"
 
 create table "addresses" (
 	"id"         integer not null primary key autoincrement ,
-	"local_part" varchar not null ,
 	"domain_id"  integer not null ,
 	"mailbox_id" integer not null ,
+	"local_part" varchar not null ,
 
 	foreign key ( "domain_id" ) references "domains" ( "id" ) on delete restrict ,
 	foreign key ( "mailbox_id" ) references "mailboxes" ( "id" ) on delete restrict
