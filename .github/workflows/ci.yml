@@ -22,7 +22,8 @@ jobs:
 
       - name: Install build tools
         run: |
-          go get github.com/google/wire/cmd/wire
+          go get -v github.com/google/wire/cmd/wire
+          go get -v github.com/GeertJohan/go.rice/rice
 
       - name: Build
         run: make build
@@ -39,7 +40,7 @@ jobs:
 
       - name: Install lint tools
         run: |
-          go get golang.org/x/lint/golint
+          go get -v golang.org/x/lint/golint
 
       - name: go vet
         run: |

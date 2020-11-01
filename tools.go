@@ -11,4 +11,7 @@ import (
 
 	// Database migrations
 	_ "github.com/rubenv/sql-migrate/sql-migrate"
+
+	// Resource embedding
+	_ "github.com/GeertJohan/go.rice/rice"
 )

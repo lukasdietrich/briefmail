@@ -18,12 +18,16 @@ clean:
 
 .PHONY: build
 build: $(BINARY)
+	rice \
+		--import-path github.com/lukasdietrich/briefmail/internal/database \
+		append \
+		--exec $(BINARY)
 
 $(TARGET):
 	mkdir -p $(TARGET)
 
 $(BINARY): $(WIRE) | $(TARGET)
-	go build -o $(BINARY) -ldflags '-X "main.Version=$(VERSION)"' $(MAIN)
+	go build -v -o $(BINARY) -ldflags '-X "main.Version=$(VERSION)"' $(MAIN)
 
 $(WIRE): $(SOURCE)
 	wire ./...
