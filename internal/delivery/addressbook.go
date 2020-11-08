@@ -22,26 +22,6 @@ import (
 	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
-// Addressbook is a registry to lookup mail addresses.
-type Addressbook struct {
-	database   database.Conn
-	domainDao  database.DomainDao
-	mailboxDao database.MailboxDao
-}
-
-// NewAddressbook creates a new Addressbook.
-func NewAddressbook(
-	db database.Conn,
-	domainDao database.DomainDao,
-	mailboxDao database.MailboxDao,
-) *Addressbook {
-	return &Addressbook{
-		database:   db,
-		domainDao:  domainDao,
-		mailboxDao: mailboxDao,
-	}
-}
-
 // LookupResult is the result of an address lookup.
 type LookupResult struct {
 	// Address is the address used for lookup.
@@ -54,14 +34,39 @@ type LookupResult struct {
 	Mailbox *models.MailboxEntity
 }
 
-// Lookup looks up an address without a transaction. See LookupTx.
-func (a *Addressbook) Lookup(ctx context.Context, recipient models.Address) (*LookupResult, error) {
+// Addressbook is a registry to lookup mail addresses.
+type Addressbook interface {
+	// Lookup looks up an address without a transaction. See LookupTx.
+	Lookup(context.Context, models.Address) (*LookupResult, error)
+	// LookupTx looks up an address. The result indicates if the address belongs to a local domain
+	// and if it does, if it exists. Only database errors may occur.
+	LookupTx(context.Context, database.Queryer, models.Address) (*LookupResult, error)
+}
+
+// NewAddressbook creates a new Addressbook.
+func NewAddressbook(
+	db database.Conn,
+	domainDao database.DomainDao,
+	mailboxDao database.MailboxDao,
+) Addressbook {
+	return &addressbook{
+		database:   db,
+		domainDao:  domainDao,
+		mailboxDao: mailboxDao,
+	}
+}
+
+type addressbook struct {
+	database   database.Conn
+	domainDao  database.DomainDao
+	mailboxDao database.MailboxDao
+}
+
+func (a *addressbook) Lookup(ctx context.Context, recipient models.Address) (*LookupResult, error) {
 	return a.LookupTx(ctx, a.database, recipient)
 }
 
-// LookupTx looks up an address. The result indicates if the address belongs to a local domain and
-// if it does, if it exists. Only database errors may occur.
-func (a *Addressbook) LookupTx(
+func (a *addressbook) LookupTx(
 	ctx context.Context,
 	q database.Queryer,
 	recipient models.Address,
@@ -83,7 +88,7 @@ func (a *Addressbook) LookupTx(
 	return &LookupResult{Address: recipient, IsLocal: isLocal, Mailbox: mailbox}, nil
 }
 
-func (a *Addressbook) checkLocal(
+func (a *addressbook) checkLocal(
 	ctx context.Context,
 	q database.Queryer,
 	address models.Address,

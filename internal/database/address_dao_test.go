@@ -89,7 +89,6 @@ func (s *AddressDaoTestSuite) TestFindAll() {
 				( 1337, 'Person1' ) ,
 				( 1338, 'Person2' ) ;
 
-
 			insert into "domains" 
 				( "id", "name" )
 			values

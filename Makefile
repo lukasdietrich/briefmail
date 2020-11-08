@@ -45,5 +45,4 @@ $(MOCKS): $(SOURCE)
 		--name "^[A-Z]" \
 		--output $(MOCKS) \
 		--disable-version-string \
-		--testonly \
 		--keeptree

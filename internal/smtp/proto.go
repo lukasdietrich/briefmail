@@ -46,7 +46,7 @@ type Proto struct {
 func New(
 	authenticator *delivery.Authenticator,
 	mailman *delivery.Mailman,
-	addressbook *delivery.Addressbook,
+	addressbook delivery.Addressbook,
 	cache *storage.Cache,
 	tlsConfig *tls.Config,
 	fromHooks []hook.FromHook,

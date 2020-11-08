@@ -49,7 +49,7 @@ type Mailman struct {
 	mailDao      database.MailDao
 	recipientDao database.RecipientDao
 	blobs        *storage.Blobs
-	addressbook  *Addressbook
+	addressbook  Addressbook
 	queue        *Queue
 }
 
@@ -59,7 +59,7 @@ func NewMailman(
 	mailDao database.MailDao,
 	recipientDao database.RecipientDao,
 	blobs *storage.Blobs,
-	addressbook *Addressbook,
+	addressbook Addressbook,
 	queue *Queue,
 ) *Mailman {
 	return &Mailman{

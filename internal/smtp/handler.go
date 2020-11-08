@@ -156,7 +156,7 @@ func quit() handler {
 // `MAIL` command as specified in RFC#5321 4.1.1.2
 //
 //     "MAIL FROM:<" <Reverse-path> ">" [ SP Parameters ] CRLF
-func mail(addressbook *delivery.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
+func mail(addressbook delivery.Addressbook, maxSize int64, hooks []hook.FromHook) handler {
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo, sMail) {
 			return errBadSequence
@@ -278,7 +278,7 @@ func execFromHooks(ctx context.Context, s *session, from models.Address, hooks [
 // `RCPT` command as specified in RFC#5321 4.1.1.3
 //
 //     "RCPT TO:<" <Forward-path> ">" [ SP Parameters ] CRLF
-func rcpt(addressbook *delivery.Addressbook) handler {
+func rcpt(addressbook delivery.Addressbook) handler {
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sMail, sRcpt) {
 			return errBadSequence
