@@ -16,7 +16,6 @@
 package database
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -29,28 +28,17 @@ func TestAddressDaoTestSuite(t *testing.T) {
 }
 
 type AddressDaoTestSuite struct {
-	suite.Suite
+	baseDatabaseTestSuite
 
-	ctx        context.Context
-	conn       Conn
 	addressDao AddressDao
 }
 
-func (s *AddressDaoTestSuite) SetupTest() {
-	conn, err := openInMemory()
-	s.Require().NoError(err)
-
-	s.ctx = context.Background()
-	s.conn = conn
+func (s *AddressDaoTestSuite) SetupSuite() {
 	s.addressDao = NewAddressDao()
 }
 
-func (s *AddressDaoTestSuite) TearDownTest() {
-	s.Require().NoError(s.conn.Close())
-}
-
 func (s *AddressDaoTestSuite) TestInsert() {
-	s.conn.ExecContext(s.ctx,
+	s.requireExec(
 		`
 			insert into "domains" ( "id", "name" ) values ( 42, 'example.com' ) ;
 			insert into "mailboxes" ( "id", "display_name" ) values ( 1337, 'Someone' ) ;
@@ -65,10 +53,18 @@ func (s *AddressDaoTestSuite) TestInsert() {
 	s.Assert().Zero(address.ID)
 	s.Assert().NoError(s.addressDao.Insert(s.ctx, s.conn, &address))
 	s.Assert().NotZero(address.ID)
+
+	s.assertQuery(
+		`
+			select "id", "domain_id", "mailbox_id", "local_part"
+			from "addresses" ;
+		`,
+		[]string{"1", "42", "1337", "someone"},
+	)
 }
 
 func (s *AddressDaoTestSuite) TestDelete() {
-	s.conn.ExecContext(s.ctx,
+	s.requireExec(
 		`
 			insert into "domains" ( "id", "name" ) values ( 42, 'example.com' ) ;
 			insert into "mailboxes" ( "id", "display_name" ) values ( 1337, 'Someone' ) ;
@@ -79,15 +75,9 @@ func (s *AddressDaoTestSuite) TestDelete() {
 				( 123, 'someone', 42, 1337 ) ;
 		`)
 
-	addresses, err := s.addressDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Assert().Len(addresses, 1)
-
+	s.assertQuery(`select count(*) from "addresses" ;`, []string{"1"})
 	s.Assert().NoError(s.addressDao.Delete(s.ctx, s.conn, &models.AddressEntity{ID: 123}))
-
-	addresses, err = s.addressDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Assert().Len(addresses, 0)
+	s.assertQuery(`select count(*) from "addresses" ;`, []string{"0"})
 }
 
 func (s *AddressDaoTestSuite) TestFindAll() {

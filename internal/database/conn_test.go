@@ -19,10 +19,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lukasdietrich/briefmail/internal/models"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/lukasdietrich/briefmail/internal/models"
 )
 
 func TestCreateDataSourceName(t *testing.T) {

@@ -16,7 +16,6 @@
 package database
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -29,24 +28,13 @@ func TestDomainDaoTestSuite(t *testing.T) {
 }
 
 type DomainDaoTestSuite struct {
-	suite.Suite
+	baseDatabaseTestSuite
 
-	ctx       context.Context
-	conn      Conn
 	domainDao DomainDao
 }
 
-func (s *DomainDaoTestSuite) SetupTest() {
-	conn, err := openInMemory()
-	s.Require().NoError(err)
-
-	s.ctx = context.Background()
-	s.conn = conn
+func (s *DomainDaoTestSuite) SetupSuite() {
 	s.domainDao = NewDomainDao()
-}
-
-func (s *DomainDaoTestSuite) TearDownTest() {
-	s.Require().NoError(s.conn.Close())
 }
 
 func (s *DomainDaoTestSuite) TestInsert() {
@@ -58,13 +46,16 @@ func (s *DomainDaoTestSuite) TestInsert() {
 	s.Assert().NoError(s.domainDao.Insert(s.ctx, s.conn, &domain))
 	s.Assert().NotZero(domain.ID)
 
-	domains, err := s.domainDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Assert().Equal([]models.DomainEntity{domain}, domains)
+	s.assertQuery(
+		`
+			select "id", "name"
+			from "domains" ;
+		`,
+		[]string{"1", "new.example.com"})
 }
 
 func (s *DomainDaoTestSuite) TestUpdate() {
-	s.conn.ExecContext(s.ctx,
+	s.requireExec(
 		`
 			insert into "domains"
 				( "id", "name" )
@@ -79,13 +70,16 @@ func (s *DomainDaoTestSuite) TestUpdate() {
 
 	s.Assert().NoError(s.domainDao.Update(s.ctx, s.conn, &domain))
 
-	domains, err := s.domainDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Assert().Equal([]models.DomainEntity{domain}, domains)
+	s.assertQuery(
+		`
+			select "id", "name"
+			from "domains" ;
+		`,
+		[]string{"42", "updated.example.com"})
 }
 
 func (s *DomainDaoTestSuite) TestDelete() {
-	s.conn.ExecContext(s.ctx,
+	s.requireExec(
 		`
 			insert into "domains"
 				( "id", "name" )
@@ -93,15 +87,9 @@ func (s *DomainDaoTestSuite) TestDelete() {
 				( 42, 'wrong.example.com' ) ;
 		`)
 
-	domains, err := s.domainDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Require().Len(domains, 1)
-
+	s.assertQuery(`select count(*) from "domains" ;`, []string{"1"})
 	s.Assert().NoError(s.domainDao.Delete(s.ctx, s.conn, &models.DomainEntity{ID: 42}))
-
-	domains, err = s.domainDao.FindAll(s.ctx, s.conn)
-	s.Assert().NoError(err)
-	s.Assert().Len(domains, 0)
+	s.assertQuery(`select count(*) from "domains" ;`, []string{"0"})
 }
 
 func (s *DomainDaoTestSuite) TestFindAll() {
