@@ -2,3 +2,4 @@ target/
 data/
 
 wire_gen.go
+internal/mocks

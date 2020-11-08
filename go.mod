@@ -18,6 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.6.1
+	github.com/vektra/mockery/v2 v2.3.0
 	github.com/zaccone/spf v0.0.0-20170817004109-76747b8658d9
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b
 	golang.org/x/net v0.0.0-20200625001655-4c5254603344

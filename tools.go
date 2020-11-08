@@ -14,4 +14,7 @@ import (
 
 	// Resource embedding
 	_ "github.com/GeertJohan/go.rice/rice"
+
+	// Mock generation
+	_ "github.com/vektra/mockery/v2"
 )
