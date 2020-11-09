@@ -39,46 +39,42 @@ func init() {
 }
 
 // Authenticator is for authentication of users based on their addresses.
-type Authenticator struct {
-	database             database.Conn
-	mailboxDao           database.MailboxDao
-	mailboxCredentialDao database.MailboxCredentialDao
-
-	minDuration time.Duration
+type Authenticator interface {
+	// Auth searches for a mailbox by address. If the address does not exist, is not local or the
+	// password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
+	// may occur.
+	Auth(ctx context.Context, name, pass []byte) (*models.MailboxEntity, error)
 }
 
 // NewAuthenticator creates a new Authenticator.
 func NewAuthenticator(
 	db database.Conn,
-	mailboxDao database.MailboxDao,
 	mailboxCredentialDao database.MailboxCredentialDao,
-) *Authenticator {
-	return &Authenticator{
+	addressbook Addressbook,
+) Authenticator {
+	return &authenticator{
 		database:             db,
-		mailboxDao:           mailboxDao,
 		mailboxCredentialDao: mailboxCredentialDao,
+		addressbook:          addressbook,
 
 		minDuration: viper.GetDuration("security.auth.minDuration"),
 	}
 }
 
-// Auth searches for a mailbox by address. If the address does not exist, is not local or the
-// password does not match the stored hash, ErrWrongAddressPassword is returned. Database errors
-// may occur.
-func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*models.MailboxEntity, error) {
+type authenticator struct {
+	database             database.Conn
+	mailboxCredentialDao database.MailboxCredentialDao
+	addressbook          Addressbook
+
+	minDuration time.Duration
+}
+
+func (a *authenticator) Auth(ctx context.Context, name, pass []byte) (*models.MailboxEntity, error) {
 	startTime := time.Now()
 	defer a.ensureMinDuration(startTime)
 
 	result, err := a.lookup(ctx, name)
 	if err != nil {
-		if isErrUnknownAddress(err) {
-			log.WarnContext(ctx).
-				Bytes("name", name).
-				Msg("failed auth attempt: unknown or invalid address")
-
-			return nil, ErrWrongAddressPassword
-		}
-
 		return nil, err
 	}
 
@@ -97,7 +93,7 @@ func (a *Authenticator) Auth(ctx context.Context, name, pass []byte) (*models.Ma
 	return result.mailbox, nil
 }
 
-func (a *Authenticator) ensureMinDuration(start time.Time) {
+func (a *authenticator) ensureMinDuration(start time.Time) {
 	elapsed := time.Since(start)
 	remaining := a.minDuration - elapsed
 
@@ -111,28 +107,35 @@ type mailboxWithCredentials struct {
 	credentials *models.MailboxCredentialEntity
 }
 
-func (a *Authenticator) lookup(ctx context.Context, name []byte) (*mailboxWithCredentials, error) {
+func (a *authenticator) lookup(ctx context.Context, name []byte) (*mailboxWithCredentials, error) {
 	addr, err := models.ParseNormalized(string(name))
 	if err != nil {
-		return nil, err
+		log.WarnContext(ctx).
+			Bytes("name", name).
+			Err(err).
+			Msg("failed auth attempt: invalid address")
+
+		return nil, ErrWrongAddressPassword
 	}
 
-	mailbox, err := a.mailboxDao.FindByAddress(ctx, a.database, addr)
+	result, err := a.addressbook.Lookup(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
 
-	credentials, err := a.mailboxCredentialDao.FindByMailbox(ctx, a.database, mailbox)
+	if !result.IsLocal || result.Mailbox == nil {
+		log.WarnContext(ctx).
+			Bytes("name", name).
+			Msg("failed auth attempt: unknown address")
+
+		return nil, ErrWrongAddressPassword
+	}
+
+	credentials, err := a.mailboxCredentialDao.FindByMailbox(ctx, a.database, result.Mailbox)
 	if err != nil {
 		return nil, err
 	}
 
-	return &mailboxWithCredentials{mailbox, credentials}, nil
+	return &mailboxWithCredentials{result.Mailbox, credentials}, nil
 
-}
-
-func isErrUnknownAddress(err error) bool {
-	return database.IsErrNoRows(err) ||
-		errors.Is(err, models.ErrInvalidAddressFormat) ||
-		errors.Is(err, models.ErrPathTooLong)
 }

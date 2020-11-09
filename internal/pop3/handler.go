@@ -58,7 +58,7 @@ func user() handler {
 // `PASS` command as specified in RFC#1939
 //
 //     "PASS" <password> CRLF
-func pass(l *locks, authenticator *delivery.Authenticator, inboxer *delivery.Inboxer) handler {
+func pass(l *locks, authenticator delivery.Authenticator, inboxer *delivery.Inboxer) handler {
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sUser) {
 			return errBadSequence

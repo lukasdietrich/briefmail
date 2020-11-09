@@ -4,11 +4,11 @@ MAIN     = ./cmd/briefmail
 INTERNAL = ./internal
 
 TARGET   = ./target
-SOURCE   = $(shell find . -name "*.go" ! -name "*_gen.go" ! -path "$(MOCKS)/*")
+SOURCE   = $(shell find . -name "*.go" ! -name "*_gen.go" ! -name "mock_*")
+MOCKS    = $(shell find . -name "mock_*")
 
 BINARY   = $(TARGET)/briefmail
 WIRE     = $(MAIN)/wire_gen.go
-MOCKS    = $(INTERNAL)/mocks
 COVERAGE = $(TARGET)/coverage.txt
 
 .PHONY: all
@@ -26,7 +26,13 @@ build: $(BINARY)
 		--exec $(BINARY)
 
 .PHONY: test
-test: $(MOCKS)
+test: $(SOURCE)
+	mockery \
+		--dir $(INTERNAL) \
+		--recursive \
+		--name "^[A-Z]" \
+		--disable-version-string \
+		--inpackage
 	go test -race -coverprofile=$(COVERAGE) -covermode=atomic ./...
 
 $(TARGET):
@@ -37,12 +43,3 @@ $(BINARY): $(WIRE) | $(TARGET)
 
 $(WIRE): $(SOURCE)
 	wire ./...
-
-$(MOCKS): $(SOURCE)
-	mockery \
-		--dir $(INTERNAL) \
-		--recursive \
-		--name "^[A-Z]" \
-		--output $(MOCKS) \
-		--disable-version-string \
-		--keeptree

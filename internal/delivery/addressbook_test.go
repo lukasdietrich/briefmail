@@ -20,12 +20,12 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/log"
 	"github.com/lukasdietrich/briefmail/internal/models"
-
-	database "github.com/lukasdietrich/briefmail/internal/mocks/database"
 )
 
 func TestAddressbookTestSuite(t *testing.T) {
@@ -37,23 +37,24 @@ type AddressbookTestSuite struct {
 
 	addressbook Addressbook
 
-	db         *database.Conn
-	domainDao  *database.DomainDao
-	mailboxDao *database.MailboxDao
+	db         *database.MockConn
+	domainDao  *database.MockDomainDao
+	mailboxDao *database.MockMailboxDao
 }
 
 func (s *AddressbookTestSuite) SetupTest() {
-	s.db = new(database.Conn)
-	s.domainDao = new(database.DomainDao)
-	s.mailboxDao = new(database.MailboxDao)
+	s.db = new(database.MockConn)
+	s.domainDao = new(database.MockDomainDao)
+	s.mailboxDao = new(database.MockMailboxDao)
 
 	s.addressbook = NewAddressbook(s.db, s.domainDao, s.mailboxDao)
 }
 
 func (s *AddressbookTestSuite) TeardownTest() {
-	s.db.AssertExpectations(s.T())
-	s.domainDao.AssertExpectations(s.T())
-	s.mailboxDao.AssertExpectations(s.T())
+	mock.AssertExpectationsForObjects(s.T(),
+		s.db,
+		s.domainDao,
+		s.mailboxDao)
 }
 
 func (s *AddressbookTestSuite) TestLookupExistingAddress() {

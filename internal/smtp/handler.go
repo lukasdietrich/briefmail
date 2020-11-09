@@ -461,7 +461,7 @@ func starttls(config *tls.Config) handler {
 // `AUTH` command as specified in RFC#4954
 //
 //     "AUTH" <Mechanism> [ Payload ] CRLF
-func auth(authenticator *delivery.Authenticator) handler {
+func auth(authenticator delivery.Authenticator) handler {
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sHelo) {
 			return errBadSequence

@@ -36,7 +36,7 @@ type Proto struct {
 
 // New creates a new Protocol instance to be used with a textproto Server
 func New(
-	authenticator *delivery.Authenticator,
+	authenticator delivery.Authenticator,
 	inboxer *delivery.Inboxer,
 	blobs *storage.Blobs,
 	tlsConfig *tls.Config,
