@@ -38,7 +38,7 @@ type Proto struct {
 func New(
 	authenticator delivery.Authenticator,
 	inboxer *delivery.Inboxer,
-	blobs *storage.Blobs,
+	blobs storage.Blobs,
 	tlsConfig *tls.Config,
 ) *Proto {
 	locks := newLocks()

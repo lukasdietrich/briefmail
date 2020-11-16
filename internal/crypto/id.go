@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package storage
+package crypto
 
 import (
 	"crypto/rand"
@@ -21,16 +21,34 @@ import (
 	"io"
 )
 
-var random = rand.Reader
+// IDGenerator is a service to generate unique string IDs.
+type IDGenerator interface {
+	// GenerateID generates a new id.
+	GenerateID() (string, error)
+}
 
-// newRandomID generates a random id using the global random variable.
-func newRandomID() (string, error) {
+// NewIDGenerator creates a new id generator.
+func NewIDGenerator() IDGenerator {
+	return &randomIDGenerator{random: rand.Reader}
+}
+
+type randomIDGenerator struct {
+	random io.Reader
+}
+
+func (r randomIDGenerator) GenerateID() (string, error) {
 	const byteLength = 16
 
-	b := make([]byte, byteLength)
-	if _, err := io.ReadFull(random, b); err != nil {
+	b, err := r.readRandomBytes(byteLength)
+	if err != nil {
 		return "", err
 	}
 
 	return hex.EncodeToString(b), nil
+}
+
+func (r randomIDGenerator) readRandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	_, err := io.ReadFull(r.random, b)
+	return b, err
 }

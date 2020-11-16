@@ -16,64 +16,106 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"io/ioutil"
-	"math/rand"
+	"strings"
 	"testing"
 
-	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestBlobs(t *testing.T) {
-	var (
-		blobs = Blobs{fs: afero.NewMemMapFs()}
-		data  = make([]byte, 2<<16)
+func TestBlobsOptionsFromViper(t *testing.T) {
+	viper.Set("storage.blobs.foldername", "/very-secret/location")
 
-		id string
-	)
+	expected := BlobsOptions{
+		Foldername: "/very-secret/location",
+	}
+	actual := BlobsOptionsFromViper()
+	assert.Equal(t, expected, actual)
+}
 
-	rand.Seed(23980234)
-	n, err := rand.Read(data)
-	assert.NoError(t, err)
-	assert.Equal(t, len(data), n)
+func TestBlobsTestSuite(t *testing.T) {
+	suite.Run(t, new(BlobsTestSuite))
+}
 
-	t.Run("ReadNil", func(t *testing.T) {
-		_, err := blobs.Reader("")
-		assert.Error(t, err)
-	})
+type BlobsTestSuite struct {
+	baseFileystemTestSuite
 
-	t.Run("Write", func(t *testing.T) {
-		var n int64
-		id, n, err = blobs.Write(context.TODO(), bytes.NewReader(data))
-		assert.NoError(t, err)
-		assert.NotEqual(t, "", id)
-		assert.EqualValues(t, len(data), n)
-	})
+	blobs Blobs
+}
 
-	t.Run("Read", func(t *testing.T) {
-		r, err := blobs.Reader(id)
-		assert.NoError(t, err)
+func (s *BlobsTestSuite) SetupTest() {
+	s.baseFileystemTestSuite.SetupTest()
 
-		b, err := ioutil.ReadAll(r)
-		assert.NoError(t, err)
-		assert.NoError(t, r.Close())
-		assert.Equal(t, data, b)
-	})
+	blobs, err := NewBlobs(s.fs, s.idGen, BlobsOptions{Foldername: "/test/blobs"})
+	s.Require().NoError(err)
+	s.Require().NotNil(blobs)
 
-	t.Run("ReadOffset", func(t *testing.T) {
-		r, err := blobs.OffsetReader(id, 420)
-		assert.NoError(t, err)
+	s.blobs = blobs
+}
 
-		b, err := ioutil.ReadAll(r)
-		assert.NoError(t, err)
-		assert.NoError(t, r.Close())
-		assert.Equal(t, data[420:], b)
-	})
+func (s *BlobsTestSuite) TestWrite() {
+	const data = "TestWrite"
 
-	t.Run("Delete", func(t *testing.T) {
-		assert.NoError(t, blobs.Delete(context.TODO(), id))
-		assert.Error(t, blobs.Delete(context.TODO(), id))
-	})
+	s.idGen.On("GenerateID").Return(data, nil)
+
+	id, size, err := s.blobs.Write(context.TODO(), strings.NewReader(data))
+	s.Assert().NoError(err)
+	s.Assert().Equal(data, id)
+	s.Assert().EqualValues(len(data), size)
+
+	s.assertFileContent("/test/blobs/TestWrite", data)
+}
+
+func (s *BlobsTestSuite) TestReaderInvalid() {
+	_, err := s.blobs.Reader("")
+	s.Assert().Error(err)
+}
+
+func (s *BlobsTestSuite) TestReaderNotFound() {
+	_, err := s.blobs.Reader("not-existing")
+	s.Assert().Error(err)
+}
+
+func (s *BlobsTestSuite) TestReaderOK() {
+	const data = "TestReader-data"
+
+	s.requireWrite("/test/blobs/TestReader-id", data)
+
+	r, err := s.blobs.Reader("TestReader-id")
+	s.Require().NoError(err)
+	s.Require().NotNil(r)
+
+	actual, err := ioutil.ReadAll(r)
+	s.Assert().NoError(err)
+	s.Assert().EqualValues(data, actual)
+	s.Assert().NoError(r.Close())
+}
+
+func (s *BlobsTestSuite) TestOffsetReaderNotFound() {
+	_, err := s.blobs.OffsetReader("not-existing", 10)
+	s.Assert().Error(err)
+}
+
+func (s *BlobsTestSuite) TestOffsetReader() {
+	const data = "TestOffsetReader-data"
+
+	s.requireWrite("/test/blobs/TestOffsetReader-id", data)
+
+	r, err := s.blobs.OffsetReader("TestOffsetReader-id", 4)
+	s.Require().NoError(err)
+	s.Require().NotNil(r)
+
+	actual, err := ioutil.ReadAll(r)
+	s.Assert().NoError(err)
+	s.Assert().EqualValues(data[4:], actual)
+}
+
+func (s *BlobsTestSuite) TestDelete() {
+	s.requireWrite("/test/blobs/TestDelete-id", "TestDelete")
+
+	err := s.blobs.Delete(context.TODO(), "TestDelete-id")
+	s.Require().NoError(err)
 }

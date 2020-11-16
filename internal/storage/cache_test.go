@@ -16,73 +16,89 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"io/ioutil"
-	"math/rand"
+	"strings"
 	"testing"
 
-	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestCache(t *testing.T) {
-	cache := Cache{
-		fs:          afero.NewMemMapFs(),
-		memoryLimit: 1024,
+func TestCacheOptionsFromViper(t *testing.T) {
+	viper.Set("storage.cache.foldername", "/super-secret/temporary")
+	viper.Set("storage.cache.memorylimit", "123kb")
+
+	expected := CacheOptions{
+		Foldername:  "/super-secret/temporary",
+		MemoryLimit: 123 * 1024,
 	}
+	actual := CacheOptionsFromViper()
+	assert.Equal(t, expected, actual)
+}
 
-	data := make([]byte, 2048)
+func TestCacheTestSuite(t *testing.T) {
+	suite.Run(t, new(CacheTestSuite))
+}
 
-	rand.Seed(82347232)
-	n, err := rand.Read(data)
-	assert.NoError(t, err)
-	assert.Equal(t, len(data), n)
+type CacheTestSuite struct {
+	baseFileystemTestSuite
 
-	t.Run("InMemory", func(t *testing.T) {
-		entry, err := cache.Write(context.TODO(), bytes.NewReader(data[:1023]))
-		assert.NoError(t, err)
-		assert.NotNil(t, entry)
-		assert.NotNil(t, entry.memory)
-		assert.Nil(t, entry.file)
+	cache Cache
+}
 
-		for i := 0; i < 3; i++ {
-			r, err := entry.Reader()
-			assert.NoError(t, err)
-			assert.NotNil(t, r)
+func (s *CacheTestSuite) SetupTest() {
+	s.baseFileystemTestSuite.SetupTest()
 
-			b, err := ioutil.ReadAll(r)
-			assert.NoError(t, err)
-			assert.Equal(t, data[:1023], b)
-		}
+	cache, err := NewCache(s.fs, s.idGen, CacheOptions{Foldername: "/test/cache", MemoryLimit: 16})
+	s.Require().NoError(err)
+	s.Require().NotNil(cache)
 
-		assert.NoError(t, entry.Release(context.TODO()))
-	})
+	s.cache = cache
+}
 
-	t.Run("OnDisk", func(t *testing.T) {
-		entry, err := cache.Write(context.TODO(), bytes.NewReader(data))
-		assert.NoError(t, err)
-		assert.NotNil(t, entry)
-		assert.Nil(t, entry.memory)
-		assert.NotNil(t, entry.file)
+func (s *CacheTestSuite) TestInMemory() {
+	const data = "TestInMemory"
 
-		_, err = cache.fs.Stat(entry.file.Name())
-		assert.NoError(t, err)
+	entry, err := s.cache.Write(context.TODO(), strings.NewReader(data))
+	s.Require().NoError(err)
 
-		for i := 0; i < 3; i++ {
-			r, err := entry.Reader()
-			assert.NoError(t, err)
-			assert.NotNil(t, r)
+	entryStruct, ok := entry.(*cacheEntry)
+	s.Require().True(ok)
+	s.Assert().NotNil(entryStruct.memory)
+	s.Assert().Nil(entryStruct.file)
 
-			b, err := ioutil.ReadAll(r)
-			assert.NoError(t, err)
-			assert.Equal(t, data, b)
-		}
+	s.assertMultipleReads(entry, data)
+}
 
-		assert.Nil(t, entry.Release(context.TODO()))
+func (s *CacheTestSuite) TestOnDisk() {
+	const data = "TestOnDisk......"
 
-		_, err = cache.fs.Stat(entry.file.Name())
-		assert.Error(t, err)
-	})
+	s.idGen.On("GenerateID").Return("TestOnDisk", nil)
 
+	entry, err := s.cache.Write(context.TODO(), strings.NewReader(data))
+	s.Require().NoError(err)
+
+	entryStruct, ok := entry.(*cacheEntry)
+	s.Require().True(ok)
+	s.Assert().Nil(entryStruct.memory)
+	s.Assert().NotNil(entryStruct.file)
+
+	s.assertMultipleReads(entry, data)
+	s.assertFileContent("/test/cache/TestOnDisk", data)
+}
+
+func (s *CacheTestSuite) assertMultipleReads(entry CacheEntry, expectedContent string) {
+	for i := 0; i < 3; i++ {
+		r, err := entry.Reader()
+		s.Require().NoError(err)
+		s.Require().NotNil(r)
+
+		actualContent, err := ioutil.ReadAll(r)
+		s.Require().NoError(err)
+		s.Require().NotNil(actualContent)
+
+		s.Require().EqualValues(expectedContent, actualContent)
+	}
 }

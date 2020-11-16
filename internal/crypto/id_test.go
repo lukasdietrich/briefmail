@@ -13,32 +13,42 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-package storage
+package crypto
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRandomIDSource(t *testing.T) {
-	random = rand.New(rand.NewSource(1337))
+func TestGenerateIDSource(t *testing.T) {
+	idGen := randomIDGenerator{random: rand.New(rand.NewSource(1337))}
 
-	id1, err := newRandomID()
+	id, err := idGen.GenerateID()
 	require.NoError(t, err)
-	assert.Equal(t, "26c5a4182a817a42f545cbc6b1cd94a4", id1)
+	assert.Equal(t, "26c5a4182a817a42f545cbc6b1cd94a4", id)
 }
 
-func TestRandomIDUnique(t *testing.T) {
+func TestGenerateIDUnique(t *testing.T) {
+	idGen := NewIDGenerator()
 	set := make(map[string]bool)
 
 	for i := 0; i < 100; i++ {
-		id, err := newRandomID()
+		id, err := idGen.GenerateID()
 		require.NoError(t, err)
 		assert.False(t, set[id])
 
 		set[id] = true
 	}
+}
+
+func TestGenerateIDError(t *testing.T) {
+	idGen := randomIDGenerator{random: strings.NewReader("too-short")}
+
+	id, err := idGen.GenerateID()
+	assert.Error(t, err)
+	assert.Zero(t, id)
 }

@@ -30,11 +30,11 @@ import (
 type Cleaner struct {
 	database database.Conn
 	mailDao  database.MailDao
-	blobs    *storage.Blobs
+	blobs    storage.Blobs
 }
 
 // NewCleaner creates a new Cleaner.
-func NewCleaner(db database.Conn, mailDao database.MailDao, blobs *storage.Blobs) *Cleaner {
+func NewCleaner(db database.Conn, mailDao database.MailDao, blobs storage.Blobs) *Cleaner {
 	return &Cleaner{
 		database: db,
 		mailDao:  mailDao,

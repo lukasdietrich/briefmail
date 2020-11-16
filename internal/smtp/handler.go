@@ -338,7 +338,7 @@ func isValidDestination(s *session, destination *delivery.LookupResult) bool {
 // `DATA` command as specified in RFC#5321 4.1.1.4
 //
 //     "DATA" CRLF
-func data(mailman *delivery.Mailman, cache *storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
+func data(mailman *delivery.Mailman, cache storage.Cache, maxSize int64, hooks []hook.DataHook) handler {
 	return func(ctx context.Context, s *session, _ *command) error {
 		if !s.state.in(sRcpt) {
 			return errBadSequence

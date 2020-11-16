@@ -64,7 +64,7 @@ type Courier struct {
 	database     database.Conn
 	mailDao      database.MailDao
 	recipientDao database.RecipientDao
-	blobs        *storage.Blobs
+	blobs        storage.Blobs
 	hostname     string
 }
 
@@ -73,7 +73,7 @@ func NewCourier(
 	db database.Conn,
 	mailDao database.MailDao,
 	recipientDao database.RecipientDao,
-	blobs *storage.Blobs,
+	blobs storage.Blobs,
 ) *Courier {
 	return &Courier{
 		database:     db,

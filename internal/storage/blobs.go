@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/crypto"
 	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
@@ -30,30 +31,50 @@ func init() {
 	viper.SetDefault("storage.blobs.foldername", "data/blobs")
 }
 
-// Blobs is a permanent storage for blobs of data.
-type Blobs struct {
-	fs afero.Fs
+// BlobsOptions are the configuration properties for the blob store.
+type BlobsOptions struct {
+	Foldername string
 }
 
-// NewBlobs creates a new blobs store using configuration from viper.
-//
-// `storage.blobs.foldername` is the foldername for blob files.
-func NewBlobs() (*Blobs, error) {
-	folderName := viper.GetString("storage.blobs.foldername")
+// BlobsOptionsFromViper fills BlobsOptions using viper.
+func BlobsOptionsFromViper() BlobsOptions {
+	return BlobsOptions{
+		Foldername: viper.GetString("storage.blobs.foldername"),
+	}
+}
 
-	if err := os.MkdirAll(folderName, 0700); err != nil {
+// Blobs is a persistent storage for blobs of data.
+type Blobs interface {
+	// Write copies all the data from r to a blob, that is addressable by the returned id.
+	Write(ctx context.Context, r io.Reader) (id string, size int64, err error)
+	// Delete removes a blob by id.
+	Delete(ctx context.Context, id string) error
+	// OffsetReader returns a reader to a blob with an initial offset to be skipped.
+	// The responsibiltiy to close the reader is on the caller.
+	OffsetReader(id string, offset int64) (io.ReadCloser, error)
+	// Reader is a shorthand for OffsetReader(id, 0)
+	Reader(id string) (io.ReadCloser, error)
+}
+
+// NewBlobs creates a new blob store.
+func NewBlobs(fs afero.Fs, idGen crypto.IDGenerator, opts BlobsOptions) (Blobs, error) {
+	if err := fs.MkdirAll(opts.Foldername, 0700); err != nil {
 		return nil, err
 	}
 
-	return &Blobs{
-		fs: afero.NewBasePathFs(afero.NewOsFs(), folderName),
+	return &blobs{
+		fs:    afero.NewBasePathFs(fs, opts.Foldername),
+		idGen: idGen,
 	}, nil
 }
 
-// Write copies all the data from r to a blob, that is addressable by the
-// returned id.
-func (b *Blobs) Write(ctx context.Context, r io.Reader) (string, int64, error) {
-	id, err := newRandomID()
+type blobs struct {
+	fs    afero.Fs
+	idGen crypto.IDGenerator
+}
+
+func (b *blobs) Write(ctx context.Context, r io.Reader) (string, int64, error) {
+	id, err := b.idGen.GenerateID()
 	if err != nil {
 		return id, -1, err
 	}
@@ -93,8 +114,7 @@ func (b *Blobs) Write(ctx context.Context, r io.Reader) (string, int64, error) {
 	return id, size, f.Close()
 }
 
-// Delete removes a blob by id.
-func (b *Blobs) Delete(ctx context.Context, id string) error {
+func (b *blobs) Delete(ctx context.Context, id string) error {
 	log.InfoContext(ctx).
 		Str("filename", id).
 		Msg("removing blob")
@@ -102,9 +122,7 @@ func (b *Blobs) Delete(ctx context.Context, id string) error {
 	return b.fs.Remove(id)
 }
 
-// OffsetReader returns a reader to a blob with an initial offset to be skipped.
-// The responsibiltiy to close the reader is on the caller.
-func (b *Blobs) OffsetReader(id string, offset int64) (io.ReadCloser, error) {
+func (b *blobs) OffsetReader(id string, offset int64) (io.ReadCloser, error) {
 	if id == "" {
 		return nil, os.ErrInvalid
 	}
@@ -121,7 +139,6 @@ func (b *Blobs) OffsetReader(id string, offset int64) (io.ReadCloser, error) {
 	return f, err
 }
 
-// Reader is a shorthand for OffsetReader(id, 0)
-func (b *Blobs) Reader(id string) (io.ReadCloser, error) {
+func (b *blobs) Reader(id string) (io.ReadCloser, error) {
 	return b.OffsetReader(id, 0)
 }

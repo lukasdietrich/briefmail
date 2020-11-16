@@ -221,7 +221,7 @@ func uidl() handler {
 // `RETR` command as specified in RFC#1939
 //
 //     "RETR" <id> CRLF
-func retr(inboxer *delivery.Inboxer, blobs *storage.Blobs) handler {
+func retr(inboxer *delivery.Inboxer, blobs storage.Blobs) handler {
 	return func(ctx context.Context, s *session, c *command) error {
 		if !s.state.in(sTransaction) {
 			return errBadSequence

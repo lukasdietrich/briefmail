@@ -21,6 +21,7 @@ import (
 	"github.com/google/wire"
 
 	"github.com/lukasdietrich/briefmail/internal/certs"
+	"github.com/lukasdietrich/briefmail/internal/crypto"
 	"github.com/lukasdietrich/briefmail/internal/database"
 	"github.com/lukasdietrich/briefmail/internal/delivery"
 	"github.com/lukasdietrich/briefmail/internal/pop3"
@@ -35,6 +36,7 @@ func newStartCommand() (*startCommand, error) {
 		wire.Struct(new(startCommand), "*"),
 
 		certs.NewTLSConfig,
+		crypto.NewIDGenerator,
 
 		database.OpenConnection,
 		database.NewMailboxDao,
@@ -43,6 +45,9 @@ func newStartCommand() (*startCommand, error) {
 		database.NewMailDao,
 		database.NewRecipientDao,
 
+		storage.BlobsOptionsFromViper,
+		storage.CacheOptionsFromViper,
+		storage.NewFilesystem,
 		storage.NewBlobs,
 		storage.NewCache,
 

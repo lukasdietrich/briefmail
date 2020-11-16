@@ -19,72 +19,96 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"os"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 
+	"github.com/lukasdietrich/briefmail/internal/crypto"
 	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
 func init() {
 	viper.SetDefault("storage.cache.foldername", "data/cache")
-	viper.SetDefault("storage.cache.memoryLimit", 1<<20) // 1 Megabyte
+	viper.SetDefault("storage.cache.memorylimit", "20mb")
+}
+
+// CacheOptions are the configuration properties for the cache.
+type CacheOptions struct {
+	// Foldername is the folder to store temporary files in.
+	Foldername string
+	// MemoryLimit is the maximum size of files in bytes to be kept in memory.
+	MemoryLimit uint
+}
+
+// CacheOptionsFromViper fills CacheOptions using viper.
+func CacheOptionsFromViper() CacheOptions {
+	return CacheOptions{
+		Foldername:  viper.GetString("storage.cache.foldername"),
+		MemoryLimit: viper.GetSizeInBytes("storage.cache.memorylimit"),
+	}
 }
 
 // Cache is a temporary storage for blobs of data.
-type Cache struct {
-	fs          afero.Fs
-	memoryLimit int64
+type Cache interface {
+	// Write copies all data from the reader into temporary storage. If the total size exceeds the
+	// configured limit, the data will be written to disk.
+	Write(context.Context, io.Reader) (CacheEntry, error)
 }
 
-// NewCache creates a new cache using configuration from viper.
-//
-// `storage.cache.memoryLimit` is the maximum size of data written in memory.
-// `storage.cache.foldername` is the foldername of temporary files.
-func NewCache() (*Cache, error) {
-	var (
-		folderName  = viper.GetString("storage.cache.foldername")
-		memoryLimit = viper.GetInt64("storage.cache.memoryLimit")
-	)
+// CacheEntry is a single blob of data kept in temporary storage.
+type CacheEntry interface {
+	// Release deletes data on disk, that may have been written. If the size of the cache entry is
+	// smaller than the memory limit, this is a noop.
+	Release(context.Context) error
+	// Reader returns a new reader to the full blob of data. This essentially seeks the start of the
+	// file and is therefore not safe for concurrent use.
+	Reader() (io.Reader, error)
+}
 
-	if err := os.MkdirAll(folderName, 0700); err != nil {
+// NewCache creates a new cache.
+func NewCache(fs afero.Fs, idGen crypto.IDGenerator, opts CacheOptions) (Cache, error) {
+	if err := fs.MkdirAll(opts.Foldername, 0700); err != nil {
 		return nil, err
 	}
 
-	return &Cache{
-		fs:          afero.NewBasePathFs(afero.NewOsFs(), folderName),
-		memoryLimit: memoryLimit,
+	return &cache{
+		fs:          afero.NewBasePathFs(fs, opts.Foldername),
+		idGen:       idGen,
+		memoryLimit: int64(opts.MemoryLimit),
 	}, nil
 }
 
-// Write copies all the data from r into temporary storage. If the total size
-// exceeds the configured limit, the data will be written to disk.
-func (b *Cache) Write(ctx context.Context, r io.Reader) (*CacheEntry, error) {
+type cache struct {
+	fs          afero.Fs
+	idGen       crypto.IDGenerator
+	memoryLimit int64
+}
+
+func (c *cache) Write(ctx context.Context, r io.Reader) (CacheEntry, error) {
 	memory := bytes.NewBuffer(nil)
 
-	n, err := io.Copy(memory, io.LimitReader(r, b.memoryLimit))
+	n, err := io.Copy(memory, io.LimitReader(r, c.memoryLimit))
 	if err != nil {
 		return nil, err
 	}
 
-	if n < b.memoryLimit {
-		return &CacheEntry{memory: memory}, nil
+	if n < c.memoryLimit {
+		return &cacheEntry{memory: memory}, nil
 	}
 
-	id, err := newRandomID()
+	id, err := c.idGen.GenerateID()
 	if err != nil {
 		return nil, err
 	}
 
-	file, err := b.fs.Create(id)
+	file, err := c.fs.Create(id)
 	if err != nil {
 		return nil, err
 	}
 
 	log.InfoContext(ctx).
 		Str("filename", id).
-		Int64("memoryLimit", b.memoryLimit).
+		Int64("memoryLimit", c.memoryLimit).
 		Msg("cache entry exceeding size limit, evading to file")
 
 	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
@@ -99,7 +123,7 @@ func (b *Cache) Write(ctx context.Context, r io.Reader) (*CacheEntry, error) {
 				Msg("could not close partial cache file")
 		}
 
-		if err := b.fs.Remove(id); err != nil {
+		if err := c.fs.Remove(id); err != nil {
 			log.WarnContext(ctx).
 				Str("filename", id).
 				Err(err).
@@ -109,20 +133,17 @@ func (b *Cache) Write(ctx context.Context, r io.Reader) (*CacheEntry, error) {
 		return nil, err
 	}
 
-	return &CacheEntry{id: id, file: file, fs: b.fs}, nil
+	return &cacheEntry{id: id, file: file, fs: c.fs}, nil
 }
 
-// CacheEntry is a single blob of data kept in temporary storage.
-type CacheEntry struct {
+type cacheEntry struct {
 	memory *bytes.Buffer
 	id     string
 	file   afero.File
 	fs     afero.Fs
 }
 
-// Release deletes data on disk, that may have been written. If the size of the
-// cache entry is smaller than the memory limit, this is a noop.
-func (e *CacheEntry) Release(ctx context.Context) error {
+func (e *cacheEntry) Release(ctx context.Context) error {
 	if e.file != nil {
 		log.InfoContext(ctx).
 			Str("filename", e.id).
@@ -138,9 +159,7 @@ func (e *CacheEntry) Release(ctx context.Context) error {
 	return nil
 }
 
-// Reader returns a new reader to the full blob of data. This essentially seeks
-// the start of the file and is therefore not safe for concurrent use.
-func (e *CacheEntry) Reader() (io.Reader, error) {
+func (e *cacheEntry) Reader() (io.Reader, error) {
 	if e.file != nil {
 		if _, err := e.file.Seek(0, io.SeekStart); err != nil {
 			return nil, err

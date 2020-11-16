@@ -47,7 +47,7 @@ func New(
 	authenticator delivery.Authenticator,
 	mailman *delivery.Mailman,
 	addressbook delivery.Addressbook,
-	cache *storage.Cache,
+	cache storage.Cache,
 	tlsConfig *tls.Config,
 	fromHooks []hook.FromHook,
 	dataHooks []hook.DataHook,
