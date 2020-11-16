@@ -93,9 +93,13 @@ func (c *cache) Write(ctx context.Context, r io.Reader) (CacheEntry, error) {
 	}
 
 	if n < c.memoryLimit {
-		return &cacheEntry{memory: memory}, nil
+		return memoryEntry(memory.Bytes()), nil
 	}
 
+	return c.evadeToFile(ctx, io.MultiReader(memory, r))
+}
+
+func (c *cache) evadeToFile(ctx context.Context, r io.Reader) (CacheEntry, error) {
 	id, err := c.idGen.GenerateID()
 	if err != nil {
 		return nil, err
@@ -111,7 +115,7 @@ func (c *cache) Write(ctx context.Context, r io.Reader) (CacheEntry, error) {
 		Int64("memoryLimit", c.memoryLimit).
 		Msg("cache entry exceeding size limit, evading to file")
 
-	if _, err := io.Copy(file, io.MultiReader(memory, r)); err != nil {
+	if _, err := io.Copy(file, r); err != nil {
 		log.WarnContext(ctx).
 			Str("filename", id).
 			Msg("could not write to cache file")
@@ -133,40 +137,45 @@ func (c *cache) Write(ctx context.Context, r io.Reader) (CacheEntry, error) {
 		return nil, err
 	}
 
-	return &cacheEntry{id: id, file: file, fs: c.fs}, nil
+	return fileEntry{
+		id:   id,
+		file: file,
+		fs:   c.fs,
+	}, nil
 }
 
-type cacheEntry struct {
-	memory *bytes.Buffer
-	id     string
-	file   afero.File
-	fs     afero.Fs
-}
+type memoryEntry []byte
 
-func (e *cacheEntry) Release(ctx context.Context) error {
-	if e.file != nil {
-		log.InfoContext(ctx).
-			Str("filename", e.id).
-			Msg("removing cache file")
-
-		if err := e.file.Close(); err != nil {
-			return err
-		}
-
-		return e.fs.Remove(e.id)
-	}
-
+func (memoryEntry) Release(context.Context) error {
 	return nil
 }
 
-func (e *cacheEntry) Reader() (io.Reader, error) {
-	if e.file != nil {
-		if _, err := e.file.Seek(0, io.SeekStart); err != nil {
-			return nil, err
-		}
+func (m memoryEntry) Reader() (io.Reader, error) {
+	return bytes.NewReader(m), nil
+}
 
-		return e.file, nil
+type fileEntry struct {
+	id   string
+	file afero.File
+	fs   afero.Fs
+}
+
+func (f fileEntry) Release(ctx context.Context) error {
+	log.InfoContext(ctx).
+		Str("filename", f.id).
+		Msg("removing cache file")
+
+	if err := f.file.Close(); err != nil {
+		return err
 	}
 
-	return bytes.NewReader(e.memory.Bytes()), nil
+	return f.fs.Remove(f.id)
+}
+
+func (f fileEntry) Reader() (io.Reader, error) {
+	if _, err := f.file.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+
+	return f.file, nil
 }

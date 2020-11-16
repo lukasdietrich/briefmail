@@ -63,13 +63,10 @@ func (s *CacheTestSuite) TestInMemory() {
 
 	entry, err := s.cache.Write(context.TODO(), strings.NewReader(data))
 	s.Require().NoError(err)
-
-	entryStruct, ok := entry.(*cacheEntry)
-	s.Require().True(ok)
-	s.Assert().NotNil(entryStruct.memory)
-	s.Assert().Nil(entryStruct.file)
-
+	s.Assert().IsType(memoryEntry{}, entry)
 	s.assertMultipleReads(entry, data)
+
+	s.Assert().NoError(entry.Release(context.TODO()))
 }
 
 func (s *CacheTestSuite) TestOnDisk() {
@@ -79,14 +76,11 @@ func (s *CacheTestSuite) TestOnDisk() {
 
 	entry, err := s.cache.Write(context.TODO(), strings.NewReader(data))
 	s.Require().NoError(err)
-
-	entryStruct, ok := entry.(*cacheEntry)
-	s.Require().True(ok)
-	s.Assert().Nil(entryStruct.memory)
-	s.Assert().NotNil(entryStruct.file)
-
+	s.Assert().IsType(fileEntry{}, entry)
 	s.assertMultipleReads(entry, data)
 	s.assertFileContent("/test/cache/TestOnDisk", data)
+
+	s.Assert().NoError(entry.Release(context.TODO()))
 }
 
 func (s *CacheTestSuite) assertMultipleReads(entry CacheEntry, expectedContent string) {
