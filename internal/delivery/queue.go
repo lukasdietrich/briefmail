@@ -43,7 +43,7 @@ type Queue struct {
 	database database.Conn
 	mailDao  database.MailDao
 	courier  *Courier
-	cleaner  *Cleaner
+	cleaner  Cleaner
 
 	delaysInSeconds    []int64
 	giveUpAfterSeconds int64
@@ -58,7 +58,7 @@ func NewQueue(
 	db database.Conn,
 	mailDao database.MailDao,
 	courier *Courier,
-	cleaner *Cleaner,
+	cleaner Cleaner,
 ) (*Queue, error) {
 	var (
 		delays      = viper.GetStringSlice("mail.queue.delays")

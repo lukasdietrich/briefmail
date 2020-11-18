@@ -28,11 +28,11 @@ type Inboxer struct {
 	database     database.Conn
 	mailDao      database.MailDao
 	recipientDao database.RecipientDao
-	cleaner      *Cleaner
+	cleaner      Cleaner
 }
 
 // NewInboxer creates a new Inboxer.
-func NewInboxer(db database.Conn, cleaner *Cleaner) *Inboxer {
+func NewInboxer(db database.Conn, cleaner Cleaner) *Inboxer {
 	return &Inboxer{
 		database: db,
 		cleaner:  cleaner,

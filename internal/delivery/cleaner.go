@@ -27,24 +27,28 @@ import (
 )
 
 // Cleaner is a service to clean orphaned mail blobs and their database counterparts.
-type Cleaner struct {
-	database database.Conn
-	mailDao  database.MailDao
-	blobs    storage.Blobs
+type Cleaner interface {
+	// Clean finds all orphaned mails and deletes them. An orphaned mail is a mail not assigned to a
+	// mailbox and not queued for outbound delivery.
+	Clean(ctx context.Context) error
 }
 
 // NewCleaner creates a new Cleaner.
-func NewCleaner(db database.Conn, mailDao database.MailDao, blobs storage.Blobs) *Cleaner {
-	return &Cleaner{
+func NewCleaner(db database.Conn, mailDao database.MailDao, blobs storage.Blobs) Cleaner {
+	return &cleaner{
 		database: db,
 		mailDao:  mailDao,
 		blobs:    blobs,
 	}
 }
 
-// Clean finds all orphaned mails and deletes them. An orphaned mail is a mail not assigned to a
-// mailbox and not queued for outbound delivery.
-func (c *Cleaner) Clean(ctx context.Context) error {
+type cleaner struct {
+	database database.Conn
+	mailDao  database.MailDao
+	blobs    storage.Blobs
+}
+
+func (c *cleaner) Clean(ctx context.Context) error {
 	tx, err := c.database.Begin(ctx)
 	if err != nil {
 		return err
@@ -66,7 +70,7 @@ func (c *Cleaner) Clean(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (c *Cleaner) deleteMail(ctx context.Context, tx database.Tx, mail *models.MailEntity) error {
+func (c *cleaner) deleteMail(ctx context.Context, tx database.Tx, mail *models.MailEntity) error {
 	if err := c.blobs.Delete(ctx, mail.ID); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			return err
