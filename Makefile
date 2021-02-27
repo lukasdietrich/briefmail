@@ -20,10 +20,6 @@ clean:
 
 .PHONY: build
 build: $(BINARY)
-	rice \
-		--import-path github.com/lukasdietrich/briefmail/internal/database \
-		append \
-		--exec $(BINARY)
 
 .PHONY: test
 test: $(SOURCE)

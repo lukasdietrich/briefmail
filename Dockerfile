@@ -4,9 +4,7 @@ FROM golang:alpine as build
 
 	RUN apk --no-cache add build-base git \
 		&& go get -v github.com/google/wire/cmd/wire \
-		&& go get -v github.com/rubenv/sql-migrate/sql-migrate \
-		&& go get -v github.com/GeertJohan/go.rice/rice \
-		&& make
+		&& make build
 
 FROM alpine:latest
 	WORKDIR /app

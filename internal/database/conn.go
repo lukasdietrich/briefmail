@@ -18,23 +18,29 @@ package database
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
+	"fmt"
+	"io/fs"
 	"net/url"
 
-	rice "github.com/GeertJohan/go.rice"
 	"github.com/jmoiron/sqlx"
+	"github.com/lukasdietrich/groundwork"
 	"github.com/mattn/go-sqlite3"
-	migrate "github.com/rubenv/sql-migrate"
 	"github.com/spf13/viper"
 
 	"github.com/lukasdietrich/briefmail/internal/log"
 )
 
-const driverName = "sqlite3"
+const (
+	driverName     = "sqlite3"
+	changelogTable = "database_changelog"
+)
+
+//go:embed changesets/*
+var changesetFolder embed.FS
 
 func init() {
-	migrate.SetTable("migrations")
-
 	viper.SetDefault("storage.database.filename", "data/briefmail.sqlite")
 	viper.SetDefault("storage.database.journalmode", "wal")
 }
@@ -102,20 +108,15 @@ func OpenConnection() (Conn, error) {
 		return nil, err
 	}
 
-	migrations, err := loadMigrations()
+	changesets, err := loadChangesets()
 	if err != nil {
 		return nil, err
 	}
 
-	n, err := migrate.Exec(db.DB, driverName, migrations, migrate.Up)
-	if err != nil {
-		return nil, err
-	}
+	dialect := groundwork.Sqlite(db.DB, changelogTable)
 
-	if n > 0 {
-		log.Info().
-			Int("migrations", n).
-			Msg("database migrations applied")
+	if err := groundwork.Up(dialect, changesets); err != nil {
+		return nil, err
 	}
 
 	return conn{db}, nil
@@ -135,15 +136,11 @@ func createDataSourceName() string {
 	return dsn.String()
 }
 
-func loadMigrations() (migrate.MigrationSource, error) {
-	box, err := rice.FindBox("../../migrations")
+func loadChangesets() ([]groundwork.Changeset, error) {
+	files, err := fs.Sub(changesetFolder, "changesets")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not load changeset folder: %w", err)
 	}
 
-	source := migrate.HttpFileSystemMigrationSource{
-		FileSystem: box.HTTPBox(),
-	}
-
-	return &source, nil
+	return groundwork.FilesChangeset(files)
 }

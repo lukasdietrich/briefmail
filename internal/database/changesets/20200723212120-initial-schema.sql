@@ -1,6 +1,3 @@
-
--- +migrate Up
-
 create table "mailboxes" (
 	"id"           integer not null primary key autoincrement ,
 	"display_name" varchar not null
