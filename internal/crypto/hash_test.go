@@ -27,11 +27,11 @@ import (
 const testHash = "$argon2id$v=19$m=128,t=4,p=3$bNXFICAXMjc$UFUBBgeLPRfLZCekIoSEoQ"
 
 func TestHash(t *testing.T) {
-	viper.Set("crypto.argon2.hashlength", 16)
-	viper.Set("crypto.argon2.saltlength", 8)
-	viper.Set("crypto.argon2.time", 4)
-	viper.Set("crypto.argon2.memory", 128)
-	viper.Set("crypto.argon2.threads", 3)
+	viper.Set("security.crypto.argon2.hashlength", 16)
+	viper.Set("security.crypto.argon2.saltlength", 8)
+	viper.Set("security.crypto.argon2.time", 4)
+	viper.Set("security.crypto.argon2.memory", 128)
+	viper.Set("security.crypto.argon2.threads", 3)
 
 	var credentials models.MailboxCredentialEntity
 

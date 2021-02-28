@@ -26,22 +26,22 @@ import (
 var ErrPasswordMismatch = argon2go.ErrMismatch
 
 func init() {
-	viper.SetDefault("crypto.argon2.hashlength", 32)
-	viper.SetDefault("crypto.argon2.saltlength", 16)
-	viper.SetDefault("crypto.argon2.time", 2)
-	viper.SetDefault("crypto.argon2.memory", 64*1024)
-	viper.SetDefault("crypto.argon2.threads", 4)
+	viper.SetDefault("security.crypto.argon2.hashlength", 32)
+	viper.SetDefault("security.crypto.argon2.saltlength", 16)
+	viper.SetDefault("security.crypto.argon2.time", 2)
+	viper.SetDefault("security.crypto.argon2.memory", 64*1024)
+	viper.SetDefault("security.crypto.argon2.threads", 4)
 }
 
 // Hash applies the argon2id hashing algorithm to a password and stores the hash in the credentials.
 // The options used for hashing are determined using viper.
 func Hash(creds *models.MailboxCredentialEntity, pass []byte) (err error) {
 	opts := argon2go.Options{
-		Time:       viper.GetUint32("crypto.argon2.time"),
-		Memory:     viper.GetUint32("crypto.argon2.memory"),
-		Threads:    uint8(viper.GetUint32("crypto.argon2.threads")),
-		HashLength: viper.GetUint32("crypto.argon2.hashlength"),
-		SaltLength: viper.GetUint32("crypto.argon2.saltlength"),
+		Time:       viper.GetUint32("security.crypto.argon2.time"),
+		Memory:     viper.GetUint32("security.crypto.argon2.memory"),
+		Threads:    uint8(viper.GetUint32("security.crypto.argon2.threads")),
+		HashLength: viper.GetUint32("security.crypto.argon2.hashlength"),
+		SaltLength: viper.GetUint32("security.crypto.argon2.saltlength"),
 	}
 
 	creds.Hash, err = argon2go.Hash(pass, &opts)
