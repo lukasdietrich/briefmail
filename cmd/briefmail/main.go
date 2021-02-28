@@ -163,14 +163,26 @@ func readConfig(filename string) {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if os.IsNotExist(err) {
-			log.Fatal().
+			log.Error().
 				Err(err).
 				Msg("configuration file missing")
+
+			writeDefaultConfig(filename)
 		} else {
 			log.Fatal().
 				Err(err).
 				Msg("could not load configuration")
 		}
+	}
+}
+
+func writeDefaultConfig(filename string) {
+	log.Info().Msg("writing defaults to configuration file")
+
+	if err := viper.WriteConfigAs(filename); err != nil {
+		log.Fatal().
+			Err(err).
+			Msg("could not write defaults to configuration file")
 	}
 }
 
