@@ -29,7 +29,7 @@ import (
 
 func init() {
 	viper.SetDefault("storage.cache.foldername", "data/cache")
-	viper.SetDefault("storage.cache.memorylimit", "20mb")
+	viper.SetDefault("storage.cache.memorylimit", "1mb")
 }
 
 // CacheOptions are the configuration properties for the cache.

@@ -34,7 +34,7 @@ import (
 )
 
 func init() {
-	viper.SetDefault("mail.sizelimit", 5242880) // 5 megabye
+	viper.SetDefault("mail.sizelimit", "10mb")
 }
 
 // Proto is a smtp server protocol implementation.
@@ -54,7 +54,7 @@ func New(
 ) *Proto {
 	var (
 		hostname = viper.GetString("general.hostname")
-		maxSize  = viper.GetInt64("mail.sizelimit")
+		maxSize  = int64(viper.GetSizeInBytes("mail.sizelimit"))
 	)
 
 	return &Proto{
