@@ -1,5 +1,0 @@
-development:
-  dialect: sqlite3
-  datasource: target/briefmail.sqlite
-  dir: migrations
-  table: migrations
